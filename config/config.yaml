@@ -1,0 +1,7 @@
+solver: "value_iteration" # [value_iteration, policy_iteration]
+discount_factor: 0.95
+state_dim: 100
+convergenc_criteria: 0.001
+plot_value_space: True
+plot_policy_space: True
+env_episodes: 10
