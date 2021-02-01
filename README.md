@@ -5,8 +5,8 @@ This repo contains basic implementations of decision making algorithms based on 
 Current implementations:
 
 1) **Deterministic Markov Decision Process**
-		a) *Value Iteration*
-		b) *Policy Iteration*
+* *Value Iteration*
+* *Policy Iteration*
 
 Open ToDo list: Stochastic MDP, Reinforcement Learning Variants
 
