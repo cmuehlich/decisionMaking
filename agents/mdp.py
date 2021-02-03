@@ -1,10 +1,12 @@
 import numpy as np
 import copy
-from env.stateSpace import StateSpace
-from env.decisionComponents import TransitionModel, RewardModel
+from typing import List, Dict
+from env.stateSpace import StateSpace, State
+from env.dynamics import TransitionModel
+from env.reward import ExplicitReward
 
 class MDPAgent():
-    def __init__(self, config):
+    def __init__(self, config: Dict):
         # Parameter Definitions
         self.state_dim = config["state_dim"]
         self.convergence = config["convergenc_criteria"]
@@ -12,15 +14,16 @@ class MDPAgent():
 
         # Model Definitions
         self.env = StateSpace(self.state_dim)
-        self.reward_model = RewardModel()
+        self.reward_model = ExplicitReward(min_reward=-1, max_reward=1)
         self.transition_model = TransitionModel()
 
         # Space Definitions
         self.state_space_idx = self.env.get_state_space()
         self.value_space = np.zeros(shape=(self.state_dim, self.state_dim))
         self.action_space = [0, 1, 2]
+        self.policy = None
 
-    def compute_deterministic_cum_reward(self, state):
+    def compute_deterministic_cum_reward(self, state: State) -> List[float]:
         """
         Computes the cumulative reward for deterministic system dynamics.
         :param state: Tuple of (Position, Acceleration)
@@ -36,7 +39,7 @@ class MDPAgent():
         pass
 
 
-    def value_iteration(self):
+    def value_iteration(self) -> None:
         """
         Value Iteration procedure. System dynamics are deterministic why probabilities can be omitted here. If system
         involves a stochastic process, for each action the expectation of cumulative rewards needs to be computed by
@@ -64,7 +67,7 @@ class MDPAgent():
             print("ERROR: {}".format(max_diff))
         print("Value Iteration converged!")
 
-    def policy_iteration(self):
+    def policy_iteration(self) -> List[List[float]]:
         """
         Policy Iteration procedure. System dynamics are deterministic why probabilities can be omitted here. If system
         involves a stochastic process, for each action the expectation of cumulative rewards needs to be computed by
@@ -93,9 +96,13 @@ class MDPAgent():
             if check_sum == (self.state_dim ** 2):
                 policy_is_stable = True
                 print("Policy is stable!")
+
+        # Save policy
+        self.policy = policy
+
         return policy
 
-    def policy_evaluation(self, policy):
+    def policy_evaluation(self, policy: List[List[float]]) -> None:
         """
         Policy evaluation. Takes a policy as input and evaluates it by picking actions according to it and updating
         the state value. Policy is deterministic why no expectation needs to be computed
@@ -123,7 +130,7 @@ class MDPAgent():
             print("ERROR: {}".format(max_diff))
         print("Value Function Update converged!")
 
-    def policy_improvement(self):
+    def policy_improvement(self) -> List[List[int]]:
         """
         Policy improvement updates the policy greedily w.r.t. cumulative reward. This function is used for making the
         final improvement after value iteration. Policy iteration will use its own integrated form of policy improvement
@@ -135,11 +142,14 @@ class MDPAgent():
             state = self.env.get_state_space_value(i, j)
             best_action = np.argmax(self.compute_deterministic_cum_reward(state))
             # UPDATE POLICY
-            optimal_policy[i][j] = best_action
+            optimal_policy[i][j] = int(best_action)
+
+        # Save policy
+        self.policy = optimal_policy
 
         return optimal_policy
 
-    def get_optimal_action(self, policy, state):
+    def choose_action(self, state: State) -> int:
         """
         Function to retrieve the best action for the encountered state. The state needs to be first transformed from
         the continous to the discrete space.
@@ -148,24 +158,24 @@ class MDPAgent():
         :return: Action Space Idx, 0: Deaccelerate, 1: Hold, 2: Accelerate.
         """
         x_idx, v_idx = self.env.get_state_space_idx(state)
-        return int(policy[x_idx][v_idx])
+        return int(self.policy[x_idx][v_idx])
 
-    def get_future_reward(self, s, a):
+    def get_future_reward(self, state: State, action: int) -> float:
         """
         Computation of future reward which will be obtained by taking action a in state s. For determinisitic system
         dynamics.
-        :param s:
-        :param a:
-        :return:
+        :param state:
+        :param action:
+        :return: Reward of action a taken in state s
         """
         reward = 0.0
-        s_t1 = self.transition_model.state_transition(s, a)
+        s_t1 = self.transition_model.state_transition(state, action)
         if self.env.check_bounds(s_t1):
             x_idx, v_idx = self.env.get_state_space_idx(s_t1)
             reward = self.value_space[x_idx][v_idx]
         return reward
 
-    def rms(self, vs, vs_copy):
+    def rms(self, vs: List[List[float]], vs_copy: List[List[float]]) -> float:
         """
         RMS-Error for convergence check.
         :param vs:
