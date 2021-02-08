@@ -10,10 +10,17 @@ Current implementations:
 
 2) **Monte Carlo Reinforcement Learning**
 
-* *Monte Carlo First-Visits* - On-policy
-* *Monte Carlo All-Visits* - On-policy
+* *Monte Carlo First-Visits - On-Policy Learning*
+* *Monte Carlo All-Visits - On-Policy Learning*
 
-Open ToDo list: Stochastic MDP, MCM Off-policy, Reinforcement Learning Variants
+3) **Temporal Difference Learning - TD(0)**
+
+* *SARSA - On-Policy learning*
+* *Expected SARSA - Off-Policy learning*
+* *Q-Learning - Off-Policy Learning*
+* *Double-Q-Learning - Off-Policy Learning* 
+
+Open ToDo list: Stochastic MDP, Importance Sampling for Off-Policy, Reinforcement Learning Variants
 
 # Getting started
 
@@ -35,9 +42,11 @@ After the MDP is solved three things will open up. The first plot is showing a c
 
 #### MCMs
 
-As sparse rewards like those in the mountain car setting are troublesome for MCM as well as the short episode duration, these methods will fail.
+tbd
 
+#### TDLs
 
+tbd
 
 # Configuration
 

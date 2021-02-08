@@ -1,4 +1,5 @@
 import math
+from typing import List
 import numpy as np
 from env.stateSpace import State
 
@@ -20,7 +21,7 @@ class TransitionModel():
         else:
             raise IOError("Specified type of transition model does not exist!")
 
-    def _deterministic_state_transition(self, s_t: State, a_t: int) -> State:
+    def _deterministic_state_transition(self, s_t: State, a_t: int) -> List[float]:
         """
         Describes the deterministic state transition/ system dynamics.
         :param s_t: Initial State
@@ -35,7 +36,7 @@ class TransitionModel():
         if (x_t1 == self.system_params["x_min"] and v_t1 < 0):
             v_t1 = 0
 
-        return State(x=x_t1, v=v_t1)
+        return [x_t1, v_t1]
 
 
 

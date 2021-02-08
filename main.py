@@ -1,74 +1,31 @@
-import gym
+from typing import Dict
 import yaml
-import numpy as np
-from env.stateSpace import State
+from utils.configLoader import load_model, solve_MDP, load_env
+from utils.simulation import run_mcm, run_mdp, run_tdl
 from agents.mdp import MDPAgent
 from agents.mcm import MCMAgent
-import matplotlib.pyplot as plt
+from agents.tdl import TDLAgent
 import os
 
-def main(config):
+def main(config: Dict):
     # Load Environment
-    env = gym.make("MountainCar-v0")
+    env = load_env(config_data=config)
 
-    # # Initialize Decision Maker and compute policy
-    if config["solver"] == "value_iteration":
-        agent = MDPAgent(config=config)
-        agent.value_iteration()
-        policy = agent.policy_improvement()
-    elif config["solver"] == "policy_iteration":
-        agent = MDPAgent(config=config)
-        policy = agent.policy_iteration()
-    elif "mcm" in config["solver"]:
-        agent = MCMAgent(config=config)
-    else:
-        raise IOError("Choose one of the available solvers!")
+    # Initialize Decision Maker and compute policy
+    agent = load_model(config_data=config)
 
-    # Visualizing the results
-    if config["solver"] in ["value_iteration", "policy_iteration"]:
-        if config["plot_value_space"]:
-            plt.imshow(agent.value_space)
-            plt.show()
-        if config["plot_policy_space"]:
-            plt.imshow(policy)
-            plt.show()
+    if isinstance(agent, MDPAgent):
+        print("## Solving MDP ...")
+        solve_MDP(agent=agent, plot_results=config["plot_results"])
+        print("## Start running episodes")
+        run_mdp(config_data=config, agent=agent, world=env)
+    elif isinstance(agent, MCMAgent):
+        print("## Start running episodes")
+        run_mcm(config_data=config, agent=agent, world=env)
+    elif isinstance(agent, TDLAgent):
+        print("## Start running episodes")
+        run_tdl(config_data=config, agent=agent, world=env)
 
-    for i_episode in range(config["env_episodes"]):
-        observation = env.reset()
-        state_observation = observation.tolist()
-        current_state = State(x=state_observation[0], v=state_observation[1])
-
-        # Run simulation
-        for t in range(1000):
-            env.render()
-
-            # Interact with environment
-            action = agent.choose_action(current_state)
-            # Get Environment feedback
-            observation, reward, done, info = env.step(action)
-
-            # Add experience
-            agent.add_experience(state_obs=state_observation,
-                                 action_obs=action,
-                                 reward_obs=reward,
-                                 time_obs=t)
-
-            # Update new state
-            state_observation = observation.tolist()
-            current_state = State(x=state_observation[0], v=state_observation[1])
-            if done:
-                print("Episode finished after {} timesteps".format(t+1))
-                break
-
-        if config["solver"] in ["value_iteration", "policy_iteration"]:
-            continue
-        # Evaluate MCM
-        agent.mc_control(episode=i_episode)
-
-    env.close
-
-    if config["solver"] == "mcm":
-        agent.plot_results()
 
 if __name__ == '__main__':
     with open(os.getcwd() + "/config/config.yaml", "r") as file:

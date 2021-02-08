@@ -1,27 +1,36 @@
 import numpy as np
 import copy
 from typing import List, Dict
-from env.stateSpace import StateSpace, State
+from agents.baseClass import Agent
+from env.stateSpace import State
 from env.dynamics import TransitionModel
 from env.reward import ExplicitReward
+from enum import Enum
 
-class MDPAgent():
+class MDP_SOLVER(Enum):
+    VALUE_ITERATION = 0
+    POLICY_ITERATION = 1
+
+class MDPAgent(Agent):
     def __init__(self, config: Dict):
-        # Parameter Definitions
-        self.state_dim = config["state_dim"]
+        super().__init__(config=config,
+                         reward_model=ExplicitReward(min_reward=-1, max_reward=1),
+                         system_dynamics=TransitionModel(),
+                         learning_type=None,
+                         initial_target_policy=None,
+                         initial_behavior_policy=None)
+
         self.convergence = config["convergenc_criteria"]
-        self.discount_factor = config["discount_factor"]
 
-        # Model Definitions
-        self.env = StateSpace(self.state_dim)
-        self.reward_model = ExplicitReward(min_reward=-1, max_reward=1)
-        self.transition_model = TransitionModel()
+        if config["solver"] == "value_iteration":
+            self.solver = MDP_SOLVER.VALUE_ITERATION
+        elif config["solver"] == "policy_iteration":
+            self.solver = MDP_SOLVER.POLICY_ITERATION
+        else:
+            raise IOError("Choose available solver!")
 
-        # Space Definitions
-        self.state_space_idx = self.env.get_state_space()
+        # Value Space Definitions
         self.value_space = np.zeros(shape=(self.state_dim, self.state_dim))
-        self.action_space = [0, 1, 2]
-        self.policy = None
 
     def compute_deterministic_cum_reward(self, state: State) -> List[float]:
         """
@@ -67,7 +76,7 @@ class MDPAgent():
             print("ERROR: {}".format(max_diff))
         print("Value Iteration converged!")
 
-    def policy_iteration(self) -> List[List[float]]:
+    def policy_iteration(self) -> np.ndarray:
         """
         Policy Iteration procedure. System dynamics are deterministic why probabilities can be omitted here. If system
         involves a stochastic process, for each action the expectation of cumulative rewards needs to be computed by
@@ -93,12 +102,12 @@ class MDPAgent():
                 if old_action == new_action:
                     check_sum += 1
             print("Policy changing rate: {}".format(check_sum/(self.state_dim**2)))
-            if check_sum == (self.state_dim ** 2):
+            if check_sum/(self.state_dim**2) >= 0.99:
                 policy_is_stable = True
                 print("Policy is stable!")
 
         # Save policy
-        self.policy = policy
+        self.target_policy = policy
 
         return policy
 
@@ -130,7 +139,7 @@ class MDPAgent():
             print("ERROR: {}".format(max_diff))
         print("Value Function Update converged!")
 
-    def policy_improvement(self) -> List[List[int]]:
+    def policy_improvement(self) -> np.ndarray:
         """
         Policy improvement updates the policy greedily w.r.t. cumulative reward. This function is used for making the
         final improvement after value iteration. Policy iteration will use its own integrated form of policy improvement
@@ -145,7 +154,7 @@ class MDPAgent():
             optimal_policy[i][j] = int(best_action)
 
         # Save policy
-        self.policy = optimal_policy
+        self.target_policy = optimal_policy
 
         return optimal_policy
 
@@ -157,8 +166,7 @@ class MDPAgent():
         :param state: Tuple of (Position, Acceleration)
         :return: Action Space Idx, 0: Deaccelerate, 1: Hold, 2: Accelerate.
         """
-        x_idx, v_idx = self.env.get_state_space_idx(state)
-        return int(self.policy[x_idx][v_idx])
+        return int(self.target_policy[state.x_idx][state.v_idx])
 
     def get_future_reward(self, state: State, action: int) -> float:
         """
@@ -168,11 +176,10 @@ class MDPAgent():
         :param action:
         :return: Reward of action a taken in state s
         """
-        reward = 0.0
-        s_t1 = self.transition_model.state_transition(state, action)
-        if self.env.check_bounds(s_t1):
-            x_idx, v_idx = self.env.get_state_space_idx(s_t1)
-            reward = self.value_space[x_idx][v_idx]
+        s_t1_obs = self.transition_model.state_transition(state, action)
+        x_t1_idx, v_t1_idx = self.env.get_state_space_idx(observation=s_t1_obs)
+        new_state = State(x=s_t1_obs[0], v=s_t1_obs[1], x_pos=x_t1_idx, v_pos=v_t1_idx)
+        reward = self.value_space[new_state.x_idx][new_state.v_idx]
         return reward
 
     def rms(self, vs: List[List[float]], vs_copy: List[List[float]]) -> float:
