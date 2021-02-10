@@ -23,8 +23,11 @@ class State():
         self.x_idx = x_pos
         self.v_idx = v_pos
 
-    def get_state(self) -> Tuple[float, float]:
+    def get_state_value(self) -> Tuple[float, float]:
         return self.x, self.v
+
+    def get_state_idx(self) -> Tuple[int, int]:
+        return self.x_idx, self.v_idx
 
 class StateSpace():
     """
@@ -110,3 +113,10 @@ class StateSpace():
                 for i, j in itertools.product([idx], v_state_idxs):
                     goal_states.append((i, j))
         return goal_states
+
+    @staticmethod
+    def is_terminal(state: State) -> bool:
+        if state.x >= 0.5:
+            return True
+        else:
+            return False

@@ -7,9 +7,10 @@ from agents.baseClass import POLICY_TYPES, POLICY_LEARNING_TYPES
 
 class TDL_METHODS(Enum):
     SARSA = 0
-    EXPECTED_SARSA = 1
-    Q_LEARNING = 2
-    DOUBLE_Q_LEARNING = 3
+    N_STEP_SARSA = 1
+    EXPECTED_SARSA = 2
+    Q_LEARNING = 3
+    DOUBLE_Q_LEARNING = 4
 
 class OPERATORS(Enum):
     MAXIMIZATION = 0
@@ -24,6 +25,10 @@ class TDLAgent(Agent):
                                 "target_policy": POLICY_TYPES.EPS_GREEDY,
                                 "behavior_policy": None
                                 },
+            TDL_METHODS.N_STEP_SARSA: {"learning_type": POLICY_LEARNING_TYPES.ONLINE,
+                                       "target_policy": POLICY_TYPES.EPS_GREEDY,
+                                       "behavior_policy": None
+                                       },
             TDL_METHODS.EXPECTED_SARSA: {"learning_type": POLICY_LEARNING_TYPES.OFFLINE,
                                          "target_policy": POLICY_TYPES.EPS_GREEDY,
                                          "behavior_policy": POLICY_TYPES.EPS_GREEDY
@@ -38,6 +43,7 @@ class TDLAgent(Agent):
                                             }
         }
         self.update_rule_dict = {TDL_METHODS.SARSA: self.sarsa_update,
+                                 TDL_METHODS.N_STEP_SARSA: self.n_step_sarsa_update,
                                  TDL_METHODS.EXPECTED_SARSA: self.expected_sarsa_update,
                                  TDL_METHODS.Q_LEARNING: self.q_learning_update,
                                  TDL_METHODS.DOUBLE_Q_LEARNING: self.double_q_learning_update}
@@ -111,6 +117,32 @@ class TDLAgent(Agent):
             return self.target_policy.eps_greedy_policy(state=state, epsilon=self.epsilon, q_space=q_space)
         else:
             return self.behavior_policy.eps_greedy_policy(state=state, epsilon=self.epsilon, q_space=q_space)
+
+    def n_step_sarsa_update(self, current_time_step: int):
+        tau = current_time_step - self.n_step + 1
+
+        cumulative_reward = 0
+        if tau >= 0:
+            # Compute cumulative rewards from n steps back in the past onwards until now
+            for i in range(tau + 1, min(tau + self.n_step, self.episode_duration) + 1):
+                cumulative_reward += np.power(self.discount_factor, i - tau - 1) * self.experience[i].reward
+
+            if tau + self.n_step < self.episode_duration:
+                # Get the latest experience and use the state-action pair (SARSA) for estimating the future rewards
+                # up to the end of the episode
+                exp_tn = self.experience[tau + self.n_step]
+                cumulative_reward += np.power(self.discount_factor, self.n_step) * \
+                    self.q_space[exp_tn.action][exp_tn.state.x_idx][exp_tn.state.v_idx]
+
+            # Get the state-action pair to be updated from n - 1 steps back in the past
+            exp_t = self.experience[tau]
+            q_v_prev = self.q_space[exp_t.action][exp_t.state.x_idx][exp_t.state.v_idx]
+
+            # Compute the SARSA TD error
+            td_error = cumulative_reward - q_v_prev
+
+            # Update state-action pair
+            self.q_space[exp_t.action][exp_t.state.x_idx][exp_t.state.v_idx] += self.learning_rate * td_error
 
     def sarsa_update(self, state_t0: State, action_t0: Action, reward: float, state_t1: State, action_t1: Action) -> None:
         q_v_prev = self.q_space[action_t0.a][state_t0.x_idx][state_t0.v_idx]

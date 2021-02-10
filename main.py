@@ -1,10 +1,11 @@
-from typing import Dict
+from typing import Dict, TYPE_CHECKING
 import yaml
 from utils.configLoader import load_model, solve_MDP, load_env
-from utils.simulation import run_mcm, run_mdp, run_tdl
+from utils.simulation import run_mcm, run_mdp, run_tdl, run_mcts
 from agents.mdp import MDPAgent
 from agents.mcm import MCMAgent
 from agents.tdl import TDLAgent
+from agents.mcts import MCTSAgent
 import os
 
 def main(config: Dict):
@@ -25,6 +26,9 @@ def main(config: Dict):
     elif isinstance(agent, TDLAgent):
         print("## Start running episodes")
         run_tdl(config_data=config, agent=agent, world=env)
+    elif isinstance(agent, MCTSAgent):
+        print("## Start running episodes")
+        run_mcts(config_data=config, agent=agent, world=env)
 
 
 if __name__ == '__main__':

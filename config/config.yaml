@@ -1,12 +1,17 @@
 env: "MountainCar-v0"
 # Solver: [value_iteration, policy_iteration, mcm_first_visit, mcm_all_visit, tdl_sarsa, tdl_expected_sarsa
-#  tdl_q_learning, tdl_double_q_learning]
-solver: "tdl_expected_sarsa"
+#  tdl_q_learning, tdl_double_q_learning, tdl_n_step_sarsa, dyna_q, mcts]
+solver: "mcts"
 discount_factor: 0.95
 state_dim: 100
 convergenc_criteria: 1.1
 plot_results: True
-env_episodes: 50
+env_episodes: 100
 epsilon_greedy: 0.1
 td_alpha: 0.5
+n_step: 5
+episode_duration: 200
 dq_learning_merging_operator: "sum" # [sum, average, max]
+n_simulations: 25
+ucb_alpha: 0.5
+mcts_iterations: 10

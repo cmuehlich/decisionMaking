@@ -20,7 +20,12 @@ Current implementations:
 * *Q-Learning - Off-Policy Learning*
 * *Double-Q-Learning - Off-Policy Learning* 
 
-Open ToDo list: Stochastic MDP, Importance Sampling for Off-Policy, Reinforcement Learning Variants
+4) **Integrated Planning & Learning** 
+
+* *Dyna-Q with explicit environment model*
+* *Monte Carlo Tree Search with explicit environment model*
+
+Open ToDo list: Stochastic MDP, Importance Sampling for Off-Policy, Learned Models for IPL
 
 # Getting started
 
@@ -45,6 +50,10 @@ After the MDP is solved three things will open up. The first plot is showing a c
 tbd
 
 #### TDLs
+
+tbd
+
+#### IPL Methods
 
 tbd
 

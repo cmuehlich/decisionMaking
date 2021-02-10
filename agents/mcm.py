@@ -1,15 +1,9 @@
 from typing import List, Dict
 import numpy as np
 import copy
-from agents.baseClass import Agent, POLICY_TYPES, POLICY_LEARNING_TYPES
+from agents.baseClass import Agent, Experience, POLICY_TYPES, POLICY_LEARNING_TYPES
 from env.stateSpace import State
 
-class Experience():
-    def __init__(self, state: State, action: int, reward: float, time_step: int):
-        self.state = state
-        self.action = action
-        self.reward = reward
-        self.time_step = time_step
 
 class MCMAgent(Agent):
     def __init__(self, config: Dict):
@@ -37,21 +31,6 @@ class MCMAgent(Agent):
             self.mc_control = self._mc_control_all_visits
         else:
             raise IOError("Pick one of the available MCM Variants!")
-
-    def add_experience(self, state_obs: List[float], action_obs: int, reward_obs: float, time_obs: int) -> None:
-        """
-        Adds observations to episode experience
-        :param state_obs:
-        :param action_obs:
-        :param reward_obs:
-        :param time_obs:
-        :return:
-        """
-        observed_state = self.gen_state_from_observation(observation=state_obs)
-        self.experience.append(Experience(state=observed_state,
-                                          action=action_obs,
-                                          reward=reward_obs,
-                                          time_step=time_obs))
 
     def check_first_visit(self, check_state: State, reverse_index: int) -> bool:
         first_visited = True

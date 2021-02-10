@@ -5,16 +5,43 @@ from env.dynamics import TransitionModel
 import numpy as np
 from enum import Enum
 import abc
+import uuid
+
 
 class POLICY_LEARNING_TYPES(Enum):
     OFFLINE = 0
     ONLINE = 1
 
+
 class POLICY_TYPES(Enum):
     RANDOM = 0
     EPS_GREEDY = 1
+    UCB = 2
 
-class Policy():
+
+class Node():
+    def __init__(self, state: State, action_space: List[int]):
+        self.state = state
+        self.action_space = action_space
+
+        self.uuid = uuid.uuid4()
+        self.expanded = False
+
+        # List of successor nodes stored as list of list, containing one set of nodes for each action
+        self.successor_nodes: List[List[Node]] = [list() for i in range(len(self.action_space))]
+
+        self.total_visits = np.inf
+        self.action_visits = np.zeros(len(self.action_space))
+        self.action_rewards = [list() for i in range(len(self.action_space))]
+
+    def add_successor(self, node, action: int) -> None:
+        if node not in self.successor_nodes[action]:
+            nodes_list = self.successor_nodes[action]
+            nodes_list.append(node)
+            self.successor_nodes[action] = nodes_list
+
+
+class Policy:
     def __init__(self, policy_type: POLICY_TYPES):
         self.policy_type = policy_type
         self.state_space_idx: np.ndarray = np.ndarray
@@ -69,6 +96,18 @@ class Policy():
         prob_of_exploration = epsilon / len(self.action_space)
         return prob_of_greedy_action,prob_of_exploration
 
+    def ucb_policy(self, node: Node, beta: float, q_space: np.ndarray) -> int:
+        pass
+
+
+class Experience:
+    def __init__(self, state: State, action: int, reward: float = 0, time_step: int = 0):
+        self.state = state
+        self.action = action
+        self.reward = reward
+        self.time_step = time_step
+
+
 class Agent(abc.ABC):
     def __init__(self, config: Dict, reward_model: Union[RewardModel, None],
                  system_dynamics: Union[TransitionModel, None], learning_type: Union[POLICY_LEARNING_TYPES, None],
@@ -77,6 +116,13 @@ class Agent(abc.ABC):
         self.state_dim = config["state_dim"]
         self.epsilon = config["epsilon_greedy"]
         self.discount_factor = config["discount_factor"]
+
+        # Experience Collector
+        self.experience: List[Experience] = list()
+        if config["n_step"] < 1 or not isinstance(config["n_step"], int):
+            raise IOError("N-Step Config Parameter needs to be of type integer and >= 1")
+        self.n_step = config["n_step"]
+        self.episode_duration = config["episode_duration"]
 
         # Model definitions
         self.learning_type = learning_type
@@ -138,6 +184,38 @@ class Agent(abc.ABC):
         """
         x_idx, v_idx = self.env.get_state_space_idx(observation=observation)
         return State(x=observation[0], v=observation[1], x_pos=x_idx, v_pos=v_idx)
+
+    def gen_node_from_observation(self, observation: List[float]) -> Node:
+        """
+        Generates a node object for the environment observation
+        :param observation:
+        :return:
+        """
+        x_idx, v_idx = self.env.get_state_space_idx(observation=observation)
+        state = State(x=observation[0], v=observation[1], x_pos=x_idx, v_pos=v_idx)
+        return Node(state=state, action_space=self.action_space)
+
+    def add_experience(self, state_obs: List[float], action_obs: int, reward_obs: float, time_obs: int) -> None:
+        """
+        Adds observations to episode experience
+        :param state_obs:
+        :param action_obs:
+        :param reward_obs:
+        :param time_obs:
+        :return:
+        """
+        observed_state = self.gen_state_from_observation(observation=state_obs)
+        self.experience.append(Experience(state=observed_state,
+                                          action=action_obs,
+                                          reward=reward_obs,
+                                          time_step=time_obs))
+
+    def clear_memory(self) -> None:
+        """
+        Resets the memory storage of past state-action-reward trajectories.
+        :return:
+        """
+        self.experience.clear()
 
     @abc.abstractmethod
     def choose_action(self, state: State) -> int:

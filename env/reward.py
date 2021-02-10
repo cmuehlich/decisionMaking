@@ -2,6 +2,7 @@ import numpy as np
 import abc
 from env.stateSpace import State
 
+
 class RewardModel(abc.ABC):
     """
     Class describing the desired agent behavior.
@@ -26,6 +27,24 @@ class RewardModel(abc.ABC):
         :return:
         """
         return self._get_reward(s, a)
+
+
+class EnvReward(RewardModel):
+    def __init__(self, min_reward: float, max_reward: float):
+        super().__init__(min_reward, max_reward)
+
+    def _get_reward(self, s: State, a: int) -> float:
+        """
+        Explicitly defined reward function.
+        :param s:
+        :param a:
+        :return: float containing the obtained reward
+        """
+        reward = self.min_reward
+        if s.x >= 0.5:
+            reward = self.max_reward
+        return reward
+
 
 class ExplicitReward(RewardModel):
     def __init__(self, min_reward: float, max_reward: float):
