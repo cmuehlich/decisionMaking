@@ -25,6 +25,10 @@ Current implementations:
 * *Dyna-Q with explicit environment model*
 * *Monte Carlo Tree Search with explicit environment model*
 
+5) **Function Approximation**
+
+* *Semi-Gradient SARSA - Linear Function Approximation with code tiling*
+
 Open ToDo list: Stochastic MDP, Importance Sampling for Off-Policy, Learned Models for IPL
 
 # Getting started
@@ -43,7 +47,7 @@ Then change to the main directory and run
 
 #### MDPs 
 
-After the MDP is solved three things will open up. The first plot is showing a color coded plot of the discretized value space. For more information about the state space, check the mountain-car documentation. The second plot shows the corresponding policy space. Each cell's color indicating which of the three available actions the car should execute. And finally a window will open up displaying the solution to the simulated environment. 
+tbd
 
 #### MCMs
 

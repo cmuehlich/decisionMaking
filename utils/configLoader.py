@@ -30,6 +30,8 @@ def load_model(config_data: Dict) -> Agent:
             tdl_method = TDL_METHODS.Q_LEARNING
         elif "tdl_double_q_learning" == config_data["solver"]:
             tdl_method = TDL_METHODS.DOUBLE_Q_LEARNING
+        elif "tdl_grad_sarsa" == config_data["solver"]:
+            tdl_method = TDL_METHODS.SEMI_GRADIENT_SARSA
         else:
             raise IOError("Choose one of the available solvers!")
 

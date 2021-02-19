@@ -7,6 +7,7 @@ from enum import Enum
 from env.stateSpace import State, Action
 import numpy as np
 
+
 class PREDICTION_MODEL_TYPE(Enum):
     EXPLICIT = 0
     LEARNED = 1

@@ -2,12 +2,13 @@ from typing import List, Dict
 import numpy as np
 import copy
 from agents.baseClass import Agent, Experience, POLICY_TYPES, POLICY_LEARNING_TYPES
-from env.stateSpace import State
+from env.stateSpace import State, STATE_SPACE_TYPE
 
 
 class MCMAgent(Agent):
     def __init__(self, config: Dict):
         super().__init__(config=config,
+                         state_space_type=STATE_SPACE_TYPE.DISCRETE,
                          reward_model=None,
                          system_dynamics=None,
                          learning_type=POLICY_LEARNING_TYPES.OFFLINE,

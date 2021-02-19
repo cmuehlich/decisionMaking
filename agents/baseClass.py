@@ -1,5 +1,5 @@
 from typing import Dict, Union, List, Tuple
-from env.stateSpace import State, StateSpace
+from env.stateSpace import State, DiscreteStateSpace, ContinuousStateSpace, STATE_SPACE_TYPE
 from env.reward import RewardModel
 from env.dynamics import TransitionModel
 import numpy as np
@@ -16,10 +16,11 @@ class POLICY_LEARNING_TYPES(Enum):
 class POLICY_TYPES(Enum):
     RANDOM = 0
     EPS_GREEDY = 1
-    UCB = 2
+    EPS_GREEDY_CONT = 2
+    UCB = 3
 
 
-class Node():
+class Node:
     def __init__(self, state: State, action_space: List[int]):
         self.state = state
         self.action_space = action_space
@@ -44,11 +45,12 @@ class Node():
 class Policy:
     def __init__(self, policy_type: POLICY_TYPES):
         self.policy_type = policy_type
-        self.state_space_idx: np.ndarray = np.ndarray
+        self.state_space_idx: Union[np.ndarray, None] = None
         self.state_dim: int = 0
         self.action_space: List[int] = list()
 
-    def init_policy(self, state_dim: int, state_space_idx: List[Tuple[int, int]], action_space: List[int]) -> Union[np.ndarray, None]:
+    def init_policy(self, state_dim: Union[int, None], state_space_idx: Union[List[Tuple[int, int]], None],
+                    action_space: List[int]) -> Union[np.ndarray, None]:
         self.state_space_idx = state_space_idx
         self.state_dim = state_dim
         self.action_space = action_space
@@ -81,8 +83,26 @@ class Policy:
         if np.random.uniform() <= epsilon:
             action = np.random.choice(self.action_space)
         else:
-            # ties will be broken by picking the first occuring action
+            # ties will be broken by picking the first occurring action
             action = np.argmax([q_space[i, state.x_idx, state.v_idx] for i in range(len(self.action_space))])
+
+        return action
+
+    def eps_greedy_continuous_state_policy(self, epsilon: float, q_space: np.ndarray, feature_vector: np.ndarray) -> int:
+        """
+        Epsilon-Greedy Policy for continous state space.
+        :param state:
+        :param epsilon:
+        :param q_space:
+        :param feature_vector:
+        :return:
+        """
+        # With probability of epsilon pick a random action, otherwise act greedily
+        if np.random.uniform() <= epsilon:
+            action = np.random.choice(self.action_space)
+        else:
+            # ties will be broken by picking the first occurring action
+            action = np.argmax([q_space[i].dot(feature_vector) for i in range(len(self.action_space))])
 
         return action
 
@@ -109,7 +129,8 @@ class Experience:
 
 
 class Agent(abc.ABC):
-    def __init__(self, config: Dict, reward_model: Union[RewardModel, None],
+    def __init__(self, config: Dict, state_space_type: STATE_SPACE_TYPE,
+                 reward_model: Union[RewardModel, None],
                  system_dynamics: Union[TransitionModel, None], learning_type: Union[POLICY_LEARNING_TYPES, None],
                  initial_target_policy: Union[POLICY_TYPES, None], initial_behavior_policy: Union[POLICY_TYPES, None]):
         # Parameter Definitions
@@ -126,12 +147,16 @@ class Agent(abc.ABC):
 
         # Model definitions
         self.learning_type = learning_type
-        self.env = StateSpace(n=self.state_dim)
+        self.state_space_type = state_space_type
+        if state_space_type == state_space_type.DISCRETE:
+            self.env = DiscreteStateSpace(n=self.state_dim)
+            # State Space Configuration
+            self.state_space_idx, self.state_list = self.env.get_state_space()
+        else:
+            self.env = ContinuousStateSpace()
+
         self.reward_model = reward_model
         self.transition_model = system_dynamics
-
-        # State Space Configuration
-        self.state_space_idx, self.state_list = self.env.get_state_space()
 
         # Action Space Configuration -> here: only Mountain Car
         self.action_space = [0, 1, 2]
@@ -166,15 +191,26 @@ class Agent(abc.ABC):
                                       state_space_idx=self.state_space_idx,
                                       action_space=self.action_space)
 
+        # Epsilon-Greedy policy
+        if POLICY_TYPES.EPS_GREEDY_CONT in [initial_target_policy, initial_behavior_policy]:
+            greedy_policy_cont = Policy(policy_type=initial_target_policy)
+            greedy_policy_cont.init_policy(state_dim=None,
+                                           state_space_idx=None,
+                                           action_space=self.action_space)
+
         if initial_target_policy == POLICY_TYPES.RANDOM:
             self.target_policy = rd_policy
         elif initial_target_policy == POLICY_TYPES.EPS_GREEDY:
             self.target_policy = greedy_policy
+        elif initial_target_policy == POLICY_TYPES.EPS_GREEDY_CONT:
+            self.target_policy = greedy_policy_cont
 
         if initial_behavior_policy == POLICY_TYPES.RANDOM:
             self.behavior_policy = rd_policy
         elif initial_behavior_policy == POLICY_TYPES.EPS_GREEDY:
             self.behavior_policy = greedy_policy
+        elif initial_behavior_policy == POLICY_TYPES.EPS_GREEDY_CONT:
+            self.behavior_policy = greedy_policy_cont
 
     def gen_state_from_observation(self, observation: List[float]) -> State:
         """
@@ -182,7 +218,10 @@ class Agent(abc.ABC):
         :param observation:
         :return:
         """
-        x_idx, v_idx = self.env.get_state_space_idx(observation=observation)
+        if self.state_space_type == STATE_SPACE_TYPE.DISCRETE:
+            x_idx, v_idx = self.env.get_state_space_idx(observation=observation)
+        else:
+            x_idx, v_idx = None, None
         return State(x=observation[0], v=observation[1], x_pos=x_idx, v_pos=v_idx)
 
     def gen_node_from_observation(self, observation: List[float]) -> Node:

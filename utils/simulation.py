@@ -110,11 +110,11 @@ def run_tdl_online(config_data: Dict, agent: TDLAgent, world: gym.Env) -> None:
                                  reward_obs=reward,
                                  time_obs=t+1)
 
-            agent.update_func(current_time_step=t)
+            #agent.update_func(current_time_step=t)
 
             # Make SARSA UPDATE
-            #agent.update_func(state_t0=state_t0, action_t0=Action(a=action_t0), reward=reward,
-            #                  state_t1=state_t1, action_t1=Action(a=action_t1))
+            agent.update_func(state_t0=state_t0, action_t0=Action(a=action_t0), reward=reward,
+                              state_t1=state_t1, action_t1=Action(a=action_t1))
 
             # Update new state
             action_t0 = action_t1

@@ -1,7 +1,7 @@
 from typing import Dict, Tuple
 from enum import Enum
 from agents.baseClass import Agent
-from env.stateSpace import State, Action
+from env.stateSpace import State, Action, STATE_SPACE_TYPE
 import numpy as np
 from agents.baseClass import POLICY_TYPES, POLICY_LEARNING_TYPES
 
@@ -9,8 +9,9 @@ class TDL_METHODS(Enum):
     SARSA = 0
     N_STEP_SARSA = 1
     EXPECTED_SARSA = 2
-    Q_LEARNING = 3
-    DOUBLE_Q_LEARNING = 4
+    SEMI_GRADIENT_SARSA = 3
+    Q_LEARNING = 4
+    DOUBLE_Q_LEARNING = 5
 
 class OPERATORS(Enum):
     MAXIMIZATION = 0
@@ -23,20 +24,25 @@ class TDLAgent(Agent):
         self.update_rule_info = {
             TDL_METHODS.SARSA: {"learning_type": POLICY_LEARNING_TYPES.ONLINE,
                                 "target_policy": POLICY_TYPES.EPS_GREEDY,
-                                "behavior_policy": None
+                                "behavior_policy": None,
                                 },
             TDL_METHODS.N_STEP_SARSA: {"learning_type": POLICY_LEARNING_TYPES.ONLINE,
                                        "target_policy": POLICY_TYPES.EPS_GREEDY,
-                                       "behavior_policy": None
+                                       "behavior_policy": None,
+                                       "state_space_type": STATE_SPACE_TYPE.DISCRETE,
                                        },
             TDL_METHODS.EXPECTED_SARSA: {"learning_type": POLICY_LEARNING_TYPES.OFFLINE,
                                          "target_policy": POLICY_TYPES.EPS_GREEDY,
                                          "behavior_policy": POLICY_TYPES.EPS_GREEDY
                                          },
+            TDL_METHODS.SEMI_GRADIENT_SARSA: {"learning_type": POLICY_LEARNING_TYPES.ONLINE,
+                                              "target_policy": POLICY_TYPES.EPS_GREEDY_CONT,
+                                              "behavior_policy": POLICY_TYPES.EPS_GREEDY_CONT
+                                              },
             TDL_METHODS.Q_LEARNING: {"learning_type": POLICY_LEARNING_TYPES.OFFLINE,
                                      "target_policy": POLICY_TYPES.EPS_GREEDY,
                                      "behavior_policy": POLICY_TYPES.EPS_GREEDY
-                                    },
+                                     },
             TDL_METHODS.DOUBLE_Q_LEARNING: {"learning_type": POLICY_LEARNING_TYPES.OFFLINE,
                                             "target_policy": POLICY_TYPES.EPS_GREEDY,
                                             "behavior_policy": POLICY_TYPES.EPS_GREEDY
@@ -45,10 +51,16 @@ class TDLAgent(Agent):
         self.update_rule_dict = {TDL_METHODS.SARSA: self.sarsa_update,
                                  TDL_METHODS.N_STEP_SARSA: self.n_step_sarsa_update,
                                  TDL_METHODS.EXPECTED_SARSA: self.expected_sarsa_update,
+                                 TDL_METHODS.SEMI_GRADIENT_SARSA: self.gradient_sarsa,
                                  TDL_METHODS.Q_LEARNING: self.q_learning_update,
                                  TDL_METHODS.DOUBLE_Q_LEARNING: self.double_q_learning_update}
 
+        if tdl_method == TDL_METHODS.SEMI_GRADIENT_SARSA:
+            state_space_type = STATE_SPACE_TYPE.CONTINUOUS
+        else:
+            state_space_type = STATE_SPACE_TYPE.DISCRETE
         super().__init__(config=config,
+                         state_space_type=state_space_type,
                          reward_model=None,
                          system_dynamics=None,
                          learning_type=self.update_rule_info[tdl_method]["learning_type"],
@@ -74,15 +86,21 @@ class TDLAgent(Agent):
             q_spaces.append(self.q1_space)
             self.q2_space = np.random.random(size=(len(self.action_space), self.state_dim, self.state_dim))
             q_spaces.append(self.q2_space)
+        elif self.tdl_type == TDL_METHODS.SEMI_GRADIENT_SARSA:
+            # initial feature space
+            self.env.create_tilings()
+            # Init q-value function with random weights
+            self.q_space = [np.zeros(self.env.feature_size) for i in range(len(self.action_space))]
         else:
             self.q_space = np.random.random(size=(len(self.action_space), self.state_dim, self.state_dim))
             q_spaces.append(self.q_space)
 
         # Set terminal states to zero
-        for x_idx, v_idx in self.env.get_terminal_states():
-            for action_id in np.arange(len(self.action_space)):
-                for q_space in q_spaces:
-                    q_space[action_id][x_idx][v_idx] = 0
+        if state_space_type == STATE_SPACE_TYPE.DISCRETE:
+            for x_idx, v_idx in self.env.get_terminal_states():
+                for action_id in np.arange(len(self.action_space)):
+                    for q_space in q_spaces:
+                        q_space[action_id][x_idx][v_idx] = 0
 
     def combine_q_spaces(self, q1_space: np.ndarray, q2_space: np.ndarray, method: OPERATORS = OPERATORS.SUM) -> np.ndarray:
         q_space = np.zeros_like(q1_space)
@@ -114,9 +132,20 @@ class TDLAgent(Agent):
         # if on-policy use same policy for behavior generation as for update
         if self.learning_type == POLICY_LEARNING_TYPES.ONLINE:
             # Constant epsilon
-            return self.target_policy.eps_greedy_policy(state=state, epsilon=self.epsilon, q_space=q_space)
+            if self.tdl_type == TDL_METHODS.SEMI_GRADIENT_SARSA:
+                return self.target_policy.eps_greedy_continuous_state_policy(epsilon=self.epsilon, q_space=q_space,
+                                                                             feature_vector=self.env.get_feature_vector
+                                                                             (observation=[state.x, state.v]))
+            else:
+                return self.target_policy.eps_greedy_policy(state=state, epsilon=self.epsilon, q_space=q_space)
         else:
-            return self.behavior_policy.eps_greedy_policy(state=state, epsilon=self.epsilon, q_space=q_space)
+            if self.tdl_type == TDL_METHODS.SEMI_GRADIENT_SARSA:
+                return self.behavior_policy.eps_greedy_continuous_state_policy(epsilon=self.epsilon, q_space=q_space,
+                                                                               feature_vector=self.env.
+                                                                               get_feature_vector
+                                                                               (observation=[state.x, state.v]))
+            else:
+                return self.behavior_policy.eps_greedy_policy(state=state, epsilon=self.epsilon, q_space=q_space)
 
     def n_step_sarsa_update(self, current_time_step: int):
         tau = current_time_step - self.n_step + 1
@@ -149,6 +178,19 @@ class TDLAgent(Agent):
         td_error = reward + self.discount_factor * self.q_space[action_t1.a][state_t1.x_idx][state_t1.v_idx] - q_v_prev
 
         self.q_space[action_t0.a][state_t0.x_idx][state_t0.v_idx] += self.learning_rate * td_error
+
+    def gradient_sarsa(self, state_t0: State, action_t0: Action, reward: float, state_t1: State, action_t1: Action) -> None:
+        feature_vector_t0 = self.env.get_feature_vector(observation=[state_t0.x, state_t0.v])
+        feature_vector_t1 = self.env.get_feature_vector(observation=[state_t1.x, state_t1.v])
+        # Compute gradient: linear in weights -> feature vector
+        gradient = feature_vector_t0
+
+        q_v_prev = self.q_space[action_t0.a].dot(feature_vector_t0)
+        td_error = reward + self.discount_factor * self.q_space[action_t1.a].dot(feature_vector_t1) - q_v_prev
+        weight_update = np.multiply(gradient, self.learning_rate * td_error)
+
+        self.q_space[action_t0.a] = np.add(self.q_space[action_t0.a], weight_update)
+
 
     def expected_sarsa_update(self, state_t0: State, action_t0: Action, reward: float, state_t1: State) -> None:
         q_v_prev = self.q_space[action_t0.a][state_t0.x_idx][state_t0.v_idx]
@@ -195,5 +237,6 @@ class TDLAgent(Agent):
             td_error = reward + self.discount_factor * q1_action_value_t1 - q2_v_prev
 
             self.q2_space[action_t0.a][state_t0.x_idx][state_t0.v_idx] += self.learning_rate * td_error
+
 
 

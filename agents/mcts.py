@@ -1,9 +1,9 @@
-from typing import Dict, List, Union, Tuple
+from typing import Dict, Union, Tuple
 from agents.baseClass import POLICY_LEARNING_TYPES, POLICY_TYPES, Agent, Node
 from agents.dynaQ import PREDICTION_MODEL_TYPE
 from env.dynamics import TransitionModel
 from env.reward import EnvReward
-from env.stateSpace import State
+from env.stateSpace import State, STATE_SPACE_TYPE
 import numpy as np
 import queue
 import networkx as nx
@@ -17,6 +17,7 @@ class MCTSAgent(Agent):
             raise NotImplementedError
 
         super().__init__(config=config,
+                         state_space_type=STATE_SPACE_TYPE.DISCRETE,
                          reward_model=EnvReward(min_reward=-1, max_reward=0),
                          system_dynamics=tm,
                          learning_type=POLICY_LEARNING_TYPES.OFFLINE,
@@ -95,7 +96,7 @@ class MCTSAgent(Agent):
 
     def compute_ucb(self, node: Node) -> Node:
         best_action = np.argmax([self.q_space[action_id][node.state.x_idx][node.state.v_idx] +
-                                 self.ucb_alpha * np.sqrt(np.log(node.total_visits) / node.action_visits[action_id])
+                                 self.ucb_alpha * np.sqrt(2*np.log(node.total_visits) / node.action_visits[action_id])
                                  for action_id in self.action_space])
 
         # Get successor node of best action

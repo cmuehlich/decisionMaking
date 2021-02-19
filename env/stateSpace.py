@@ -1,22 +1,32 @@
-from typing import Tuple, List
+from typing import Tuple, List, Dict, Union
 import itertools
 from enum import Enum
+import numpy as np
+import math
+
+class STATE_SPACE_TYPE(Enum):
+    DISCRETE = 0
+    CONTINUOUS = 1
+
 
 class ACTION_SPACE_TYPE(Enum):
     DISCRETE = 0
-    CONTINOUS = 1
+    CONTINUOUS = 1
+
 
 class ACTION_SPACE(Enum):
-    DEACCELERATE = 0
+    DECELERATE = 0
     IDLE = 1
     ACCELERATE = 2
+
 
 class Action():
     def __init__(self, a: int):
         self.a = a
 
+
 class State():
-    def __init__(self, x: float, v: float, x_pos: int, v_pos: int):
+    def __init__(self, x: float, v: float, x_pos: Union[int, None] = None, v_pos: Union[int, None] = None):
         self.x = x
         self.v = v
 
@@ -29,17 +39,56 @@ class State():
     def get_state_idx(self) -> Tuple[int, int]:
         return self.x_idx, self.v_idx
 
-class StateSpace():
+
+class StateSpace:
+    def __init__(self):
+        self.state_params = {"v_min": -0.07,
+                             "v_max": 0.07,
+                             "x_min": -1.2,
+                             "x_max": 0.6}
+
+    def check_bounds(self, state: State) -> bool:
+        """
+        Checks whether state is within the discretized state space.
+        :param state: State to be checked
+        :return: Boolean specifiying validity
+        """
+        valid = False
+        if self.state_params["x_min"] <= state.x <= self.state_params["x_max"] and \
+                self.state_params["v_min"] <= state.v <= self.state_params["v_max"]:
+            valid = True
+        return valid
+
+    def get_terminal_states(self) -> List[Tuple[int, int]]:
+        """
+        Returns a list of state indexes which belong to the terminal states of the mountain car setting
+        :return: List of state space indexes
+        """
+        v_state_idxs = [int(i) for i in range(self.state_dim)]
+        goal_states = []
+        for idx, x in enumerate(self.x_steps):
+            if x >= 0.5:
+                for i, j in itertools.product([idx], v_state_idxs):
+                    goal_states.append((i, j))
+        return goal_states
+
+    @staticmethod
+    def is_terminal(state: State) -> bool:
+        if state.x >= 0.5:
+            return True
+        else:
+            return False
+
+
+class DiscreteStateSpace(StateSpace):
     """
     Class for handling everything state space related. In particular the consistent mapping between continous and
     discrete state space
     """
     def __init__(self, n: int):
+        super().__init__()
         self.state_dim = n
-        self.state_params = {"v_min": -0.07,
-                             "v_max": 0.07,
-                             "x_min": -1.2,
-                             "x_max": 0.6}
+
         self.x_size = round((self.state_params["x_max"] - self.state_params["x_min"]) / n, 6)
         self.v_size = round((self.state_params["v_max"] - self.state_params["v_min"]) / n, 6)
 
@@ -73,11 +122,10 @@ class StateSpace():
 
         return State(x=x, v=v, x_pos=x_idx, v_pos=v_idx)
 
-
     def get_state_space_idx(self, observation: List[float]) -> Tuple[int, int]:
         """
         Transforms the state from continous to discrete space by referring to the indexed state values.
-        :param state:
+        :param observation:
         :return: Tuple of state indexes
         """
         x_n = (observation[0]-self.state_params["x_min"])/self.x_size
@@ -89,34 +137,64 @@ class StateSpace():
         assert v_idx <= self.state_dim
         return x_idx, v_idx
 
-    def check_bounds(self, state: State) -> bool:
-        """
-        Checks whether state is within the discretized state space.
-        :param state: State to be checked
-        :return: Boolean specifiying validity
-        """
-        valid = False
-        if state.x <= self.state_params["x_max"] and state.x >= self.state_params["x_min"] and \
-                state.v <= self.state_params["v_max"] and state.v >= self.state_params["v_min"]:
-            valid = True
-        return valid
 
-    def get_terminal_states(self) -> List[Tuple[int]]:
-        """
-        Returns a list of state indexes which belong to the terminal states of the mountain car setting
-        :return: List of state space indexes
-        """
-        v_state_idxs = [int(i) for i in range(self.state_dim)]
-        goal_states = []
-        for idx, x in enumerate(self.x_steps):
-            if x >= 0.5:
-                for i, j in itertools.product([idx], v_state_idxs):
-                    goal_states.append((i, j))
-        return goal_states
+class ContinuousStateSpace(StateSpace):
+    def __init__(self):
+        super().__init__()
+        self.feature_size: int = 0
+        self.feature_map: Dict = dict()
+        self.tiling_info = dict()
+
+    def create_tilings(self):
+        disc_steps = [10, 20]
+        x_offset, v_offset = [0.1, 0.01], [0.01, 0.001]
+
+        tiling_counter = 0
+        for x_off, v_off in itertools.product(x_offset, v_offset):
+            for n_x, n_v in itertools.product(disc_steps, disc_steps):
+                x_size = round((self.state_params["x_max"] - self.state_params["x_min"] - x_off) / n_x, 6)
+                v_size = round((self.state_params["v_max"] - self.state_params["v_min"] - v_off) / n_v, 6)
+
+                x_min = self.state_params["x_min"] - x_off
+                x_steps = [round(x_min + i*x_size, 6) for i in range(n_x)]
+                v_min = self.state_params["v_min"] - v_off
+                v_steps = [round(v_min + i*v_size, 6) for i in range(n_v)]
+
+                self.feature_size += (len(x_steps) * len(v_steps))
+                self.feature_map[tiling_counter] = [(i, j) for i, j in itertools.product(np.arange(n_x), np.arange(n_v))]
+                self.tiling_info[tiling_counter] = {"x_lower_bound": x_min,
+                                                    "x_cell_size": x_size,
+                                                    "x_steps": n_x,
+                                                    "v_lower_bound": v_min,
+                                                    "v_cell_size": v_size,
+                                                    "v_steps": n_v}
+                tiling_counter += 1
+
+    def get_feature_vector(self, observation: List[float]):
+        feature_vector = []
+        for tiling_id, tiling_dict in self.tiling_info.items():
+            tile_feat = self.get_active_feature(observation=observation, tiling_info=tiling_dict)
+            tile_feat_idx = self.feature_map[tiling_id].index(tile_feat)
+            tile_feature_vector = np.zeros(len(self.feature_map[tiling_id]))
+            tile_feature_vector[tile_feat_idx] = 1
+            feature_vector = np.concatenate((feature_vector, tile_feature_vector), axis=0)
+
+        return feature_vector
 
     @staticmethod
-    def is_terminal(state: State) -> bool:
-        if state.x >= 0.5:
-            return True
-        else:
-            return False
+    def get_active_feature(observation: List[float], tiling_info: Dict) -> Tuple[int, int]:
+        """
+        Transforms the state from continous to discrete space by referring to the indexed state values.
+        :param observation:
+        :param tiling_info:
+        :return: Tuple of state indexes
+        """
+        x_n = (observation[0]-tiling_info["x_lower_bound"]/tiling_info["x_cell_size"])
+        x_idx = int(x_n - (x_n % tiling_info["x_cell_size"]))
+        v_n = (observation[1] - tiling_info["v_lower_bound"] / tiling_info["v_cell_size"])
+        v_idx = int(v_n - (v_n % tiling_info["v_cell_size"]))
+
+        assert x_idx <= tiling_info["x_steps"]
+        assert v_idx <= tiling_info["v_steps"]
+
+        return x_idx, v_idx

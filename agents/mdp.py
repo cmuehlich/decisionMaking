@@ -2,7 +2,7 @@ import numpy as np
 import copy
 from typing import List, Dict
 from agents.baseClass import Agent
-from env.stateSpace import State
+from env.stateSpace import State, STATE_SPACE_TYPE
 from env.dynamics import TransitionModel
 from env.reward import ExplicitReward
 from enum import Enum
@@ -14,6 +14,7 @@ class MDP_SOLVER(Enum):
 class MDPAgent(Agent):
     def __init__(self, config: Dict):
         super().__init__(config=config,
+                         state_space_type=STATE_SPACE_TYPE.DISCRETE,
                          reward_model=ExplicitReward(min_reward=-1, max_reward=1),
                          system_dynamics=TransitionModel(),
                          learning_type=None,
