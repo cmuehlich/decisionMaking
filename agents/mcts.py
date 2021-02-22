@@ -195,7 +195,7 @@ class MCTSAgent(Agent):
                 np.sum(action_rewards) / visited_node.action_visits[picked_action]
 
     def choose_action(self, state: State) -> int:
-        return self.target_policy.eps_greedy_policy(state=state, epsilon=self.epsilon, q_space=self.q_space)
+        return self.target_policy.get_action(state=state, epsilon=self.epsilon, q_space=self.q_space)
 
     def plot_graph(self, root_node: Node):
         G = nx.DiGraph()
@@ -217,6 +217,5 @@ class MCTSAgent(Agent):
                     G.add_node(node.uuid)
                     layout[node.uuid] = node.state.get_state_value()
                     G.add_edge(top_node.uuid, node.uuid)
-
 
         nx.draw(G, pos=layout, node_size=5)

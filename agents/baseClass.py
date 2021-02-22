@@ -1,5 +1,5 @@
 from typing import Dict, Union, List, Tuple
-from env.stateSpace import State, DiscreteStateSpace, ContinuousStateSpace, STATE_SPACE_TYPE
+from env.stateSpace import State, DiscreteStateSpace, ContinuousStateSpace, STATE_SPACE_TYPE, ACTION_SPACE_TYPE
 from env.reward import RewardModel
 from env.dynamics import TransitionModel
 import numpy as np
@@ -17,7 +17,7 @@ class POLICY_TYPES(Enum):
     RANDOM = 0
     EPS_GREEDY = 1
     EPS_GREEDY_CONT = 2
-    UCB = 3
+    FUNC = 3
 
 
 class Node:
@@ -46,31 +46,32 @@ class Policy:
     def __init__(self, policy_type: POLICY_TYPES):
         self.policy_type = policy_type
         self.state_space_idx: Union[np.ndarray, None] = None
-        self.state_dim: int = 0
-        self.action_space: List[int] = list()
+        self.state_dim: Union[int, None] = None
+        self.action_space: Union[List[int], None] = None
 
-    def init_policy(self, state_dim: Union[int, None], state_space_idx: Union[List[Tuple[int, int]], None],
-                    action_space: List[int]) -> Union[np.ndarray, None]:
-        self.state_space_idx = state_space_idx
-        self.state_dim = state_dim
-        self.action_space = action_space
-
-        if self.policy_type == POLICY_TYPES.RANDOM:
-            return self._random_policy()
+    def init_policy(self, state_dim: Union[int, None], state_space_idx: Union[List[Tuple[int, int]], None] = None,
+                    action_space: ACTION_SPACE_TYPE = ACTION_SPACE_TYPE.DISCRETE) -> None:
+        if self.policy_type == POLICY_TYPES.EPS_GREEDY:
+            self.state_space_idx = state_space_idx
+            self.state_dim = state_dim
+            self.action_space = action_space
         else:
-            return None
+            self.action_space = action_space.value
 
-    def _random_policy(self) -> np.ndarray:
-        """
-        Initializes a random policy
-        :return:
-        """
-        policy = np.zeros(shape=(self.state_dim, self.state_dim))
-        for i, j in self.state_space_idx:
-            policy[i][j] = np.random.choice(self.action_space)
-        return policy
+    def get_action(self, state: Union[State, None] = None, epsilon: float = 0.1,
+                   q_space: Union[np.ndarray, None] = None, feature_vector: Union[np.ndarray, None] = None) -> int:
+        if self.policy_type == POLICY_TYPES.EPS_GREEDY:
+            return self._eps_greedy_policy(state=state, epsilon=epsilon, q_space=q_space)
+        elif self.policy_type == POLICY_TYPES.EPS_GREEDY_CONT:
+            return self._eps_greedy_continuous_state_policy(epsilon=epsilon, q_space=q_space,
+                                                            feature_vector=feature_vector)
+        elif self.policy_type == POLICY_TYPES.FUNC:
+            action_probs = self.action_preference_distribution(q_space=q_space, feature_vector=feature_vector)
+            return int(np.argmax(action_probs))
+        elif self.policy_type == POLICY_TYPES.RANDOM:
+            return np.random.choice(self.action_space)
 
-    def eps_greedy_policy(self, state: State, epsilon: float, q_space: np.ndarray) -> int:
+    def _eps_greedy_policy(self, state: State, epsilon: float, q_space: np.ndarray) -> int:
         """
         Epsilon-Greedy Policy to ensure that probability of picking any action has always probability >0.
         :param state: current State
@@ -88,7 +89,7 @@ class Policy:
 
         return action
 
-    def eps_greedy_continuous_state_policy(self, epsilon: float, q_space: np.ndarray, feature_vector: np.ndarray) -> int:
+    def _eps_greedy_continuous_state_policy(self, epsilon: float, q_space: np.ndarray, feature_vector: np.ndarray) -> int:
         """
         Epsilon-Greedy Policy for continous state space.
         :param state:
@@ -116,8 +117,23 @@ class Policy:
         prob_of_exploration = epsilon / len(self.action_space)
         return prob_of_greedy_action,prob_of_exploration
 
-    def ucb_policy(self, node: Node, beta: float, q_space: np.ndarray) -> int:
-        pass
+    def action_preference_distribution(self, q_space: np.ndarray, feature_vector: np.ndarray) -> List[float]:
+        preference_values = [q_space[i].dot(feature_vector) for i in range(len(self.action_space))]
+
+        eq_check = [1 for i in range(len(preference_values) - 1) if preference_values[i] == preference_values[i+1]]
+        if len(eq_check) == len(self.action_space) - 1:
+            action_probs = [0 for i in range(len(self.action_space))]
+            action_probs[np.random.choice(self.action_space)] = 1
+        else:
+            norm = 0
+            probs = list()
+            for val in preference_values:
+                exp_val = np.exp(val)
+                probs.append(exp_val)
+                norm += exp_val
+
+            action_probs = [i/norm for i in probs]
+        return action_probs
 
 
 class Experience:
@@ -130,13 +146,17 @@ class Experience:
 
 class Agent(abc.ABC):
     def __init__(self, config: Dict, state_space_type: STATE_SPACE_TYPE,
-                 reward_model: Union[RewardModel, None],
-                 system_dynamics: Union[TransitionModel, None], learning_type: Union[POLICY_LEARNING_TYPES, None],
-                 initial_target_policy: Union[POLICY_TYPES, None], initial_behavior_policy: Union[POLICY_TYPES, None]):
+                 action_space_type: ACTION_SPACE_TYPE = ACTION_SPACE_TYPE.DISCRETE,
+                 reward_model: Union[RewardModel, None] = None,
+                 system_dynamics: Union[TransitionModel, None] = None,
+                 learning_type: Union[POLICY_LEARNING_TYPES, None] = None,
+                 initial_target_policy: Union[POLICY_TYPES, None] = None,
+                 initial_behavior_policy: Union[POLICY_TYPES, None] = None):
         # Parameter Definitions
-        self.state_dim = config["state_dim"]
         self.epsilon = config["epsilon_greedy"]
         self.discount_factor = config["discount_factor"]
+        self.learning_rate = config["learning_rate"]
+        assert 0 <= self.discount_factor <= 1
 
         # Experience Collector
         self.experience: List[Experience] = list()
@@ -149,17 +169,21 @@ class Agent(abc.ABC):
         self.learning_type = learning_type
         self.state_space_type = state_space_type
         if state_space_type == state_space_type.DISCRETE:
+            self.state_dim = config["state_dim"]
             self.env = DiscreteStateSpace(n=self.state_dim)
             # State Space Configuration
             self.state_space_idx, self.state_list = self.env.get_state_space()
         else:
+            self.state_dim = None
+            self.state_space_idx = None
             self.env = ContinuousStateSpace()
 
         self.reward_model = reward_model
         self.transition_model = system_dynamics
 
         # Action Space Configuration -> here: only Mountain Car
-        self.action_space = [0, 1, 2]
+        self.action_space_type = action_space_type
+        self.action_space = action_space_type.value
 
         # Decision Making Configuration
         self.target_policy = None
@@ -173,44 +197,18 @@ class Agent(abc.ABC):
         if self.learning_type is None and (self.target_policy is not None or self.behavior_policy is not None):
             raise IOError("Specify the desired policy learning method")
 
-    def init_policies(self, initial_target_policy: Union[POLICY_TYPES, None], initial_behavior_policy: Union[POLICY_TYPES, None]) -> None:
-        random_policy = None
-        rd_policy = None
-        greedy_policy = None
+    def init_policies(self, initial_target_policy: Union[POLICY_TYPES, None],
+                      initial_behavior_policy: Union[POLICY_TYPES, None]) -> None:
 
-        # Random policy
-        if POLICY_TYPES.RANDOM in [initial_target_policy, initial_behavior_policy]:
-            random_policy = Policy(policy_type=initial_target_policy)
-            rd_policy = random_policy.init_policy(state_dim=self.state_dim,
-                                                  state_space_idx=self.state_space_idx,
-                                                  action_space=self.action_space)
-        # Epsilon-Greedy policy
-        if POLICY_TYPES.EPS_GREEDY in [initial_target_policy, initial_behavior_policy]:
-            greedy_policy = Policy(policy_type=initial_target_policy)
-            greedy_policy.init_policy(state_dim=self.state_dim,
-                                      state_space_idx=self.state_space_idx,
-                                      action_space=self.action_space)
+        self.behavior_policy = Policy(policy_type=initial_behavior_policy)
+        self.behavior_policy.init_policy(state_dim=self.state_dim,
+                                         state_space_idx=self.state_space_idx,
+                                         action_space=self.action_space_type)
 
-        # Epsilon-Greedy policy
-        if POLICY_TYPES.EPS_GREEDY_CONT in [initial_target_policy, initial_behavior_policy]:
-            greedy_policy_cont = Policy(policy_type=initial_target_policy)
-            greedy_policy_cont.init_policy(state_dim=None,
-                                           state_space_idx=None,
-                                           action_space=self.action_space)
-
-        if initial_target_policy == POLICY_TYPES.RANDOM:
-            self.target_policy = rd_policy
-        elif initial_target_policy == POLICY_TYPES.EPS_GREEDY:
-            self.target_policy = greedy_policy
-        elif initial_target_policy == POLICY_TYPES.EPS_GREEDY_CONT:
-            self.target_policy = greedy_policy_cont
-
-        if initial_behavior_policy == POLICY_TYPES.RANDOM:
-            self.behavior_policy = rd_policy
-        elif initial_behavior_policy == POLICY_TYPES.EPS_GREEDY:
-            self.behavior_policy = greedy_policy
-        elif initial_behavior_policy == POLICY_TYPES.EPS_GREEDY_CONT:
-            self.behavior_policy = greedy_policy_cont
+        self.target_policy = Policy(policy_type=initial_target_policy)
+        self.target_policy.init_policy(state_dim=self.state_dim,
+                                       state_space_idx=self.state_space_idx,
+                                       action_space=self.action_space_type)
 
     def gen_state_from_observation(self, observation: List[float]) -> State:
         """

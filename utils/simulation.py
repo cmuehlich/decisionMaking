@@ -2,20 +2,22 @@ from typing import Dict, Union
 from agents.baseClass import POLICY_LEARNING_TYPES, Experience
 from agents.mdp import MDPAgent
 from agents.mcm import MCMAgent
-from agents.tdl import TDLAgent
+from agents.reinforce import Reinforce
+from agents.tdl import TDLAgent, TDL_METHODS
 from agents.dynaQ import DynaQ
 from agents.mcts import MCTSAgent
 import gym
 from utils.visualizations import plot_results
 from env.stateSpace import Action
 import numpy as np
+import matplotlib.pyplot as plt
 
 
-def run_mcm(config_data: Dict, agent: MCMAgent, world: gym.Env) -> None:
+def run_mcm(config_data: Dict, agent: Union[MCMAgent, Reinforce], world: gym.Env) -> None:
     for i_episode in range(config_data["env_episodes"]):
         observation = world.reset()
         current_state = agent.gen_state_from_observation(observation=observation.tolist())
-
+        cum_reward = 0
         # Run simulation
         for t in range(1000):
             world.render()
@@ -33,8 +35,11 @@ def run_mcm(config_data: Dict, agent: MCMAgent, world: gym.Env) -> None:
 
             # Update new state
             current_state = agent.gen_state_from_observation(observation=observation.tolist())
+            cum_reward += reward
             if done:
-                print("Episode finished after {} timesteps".format(t+1))
+                if i_episode > 0 and i_episode % 10 == 0:
+                    print("Results of Episode {}".format(i_episode))
+                    print("--Cumulative Reward: {}".format(cum_reward))
                 break
 
         # Evaluate MCM
@@ -81,7 +86,19 @@ def run_tdl(config_data: Dict, agent: TDLAgent, world: gym.Env):
 def run_tdl_online(config_data: Dict, agent: TDLAgent, world: gym.Env) -> None:
     reward_episode = []
     average_rewards = []
+    mean_prediction_error = []
     for i_episode in range(config_data["env_episodes"]):
+        if i_episode > 0 and (i_episode + 1) % 10 == 0:
+            mean = np.abs(np.mean(agent.td_error_list))
+            mean_prediction_error.append(mean)
+            std = np.std(agent.td_error_list)
+            print("Mean State Value Prediction Error: {}".format(mean))
+            print("Standard deviation State Value Prediction Error: {}".format(std))
+            agent.td_error_list.clear()
+
+        if agent.tdl_type == TDL_METHODS.TRUE_ONLINE_SARSA:
+            agent.q_old = 0
+
         cum_reward = 0
         observation = world.reset()
         state_t0 = agent.gen_state_from_observation(observation=observation.tolist())
@@ -110,15 +127,11 @@ def run_tdl_online(config_data: Dict, agent: TDLAgent, world: gym.Env) -> None:
                                  reward_obs=reward,
                                  time_obs=t+1)
 
-            #agent.update_func(current_time_step=t)
-
             # Make SARSA UPDATE
-            agent.update_func(state_t0=state_t0, action_t0=Action(a=action_t0), reward=reward,
-                              state_t1=state_t1, action_t1=Action(a=action_t1))
+            agent.update_func(time_step=t)
 
-            # Update new state
+            # Update new action
             action_t0 = action_t1
-            # state_t0 = state_t1
 
             # update log
             cum_reward += reward
@@ -128,7 +141,6 @@ def run_tdl_online(config_data: Dict, agent: TDLAgent, world: gym.Env) -> None:
                     print("Finished Episode: {}".format(i_episode))
                     average_rewards.append(np.mean(reward_episode))
                     reward_episode.clear()
-                # print("Episode finished after {} timesteps".format(t+1))
                 break
         # Free memory
         agent.clear_memory()
@@ -139,6 +151,11 @@ def run_tdl_online(config_data: Dict, agent: TDLAgent, world: gym.Env) -> None:
                  meta_data={"title": "Average Reward per 10/Episode",
                             "x_label": "Episodes/10",
                             "y_label": "Cumulative Reward"})
+    plt.figure()
+    plt.plot(np.arange(len(mean_prediction_error)), mean_prediction_error)
+    plt.title("Mean Prediction Error /10 Episodes")
+    plt.xlabel("Episodes/10")
+    plt.show()
 
 
 def run_tdl_offline(config_data: Dict, agent: Union[TDLAgent, DynaQ], world: gym.Env) -> None:

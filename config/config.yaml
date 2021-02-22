@@ -1,14 +1,20 @@
 env: "MountainCar-v0"
 # Solver: [value_iteration, policy_iteration, mcm_first_visit, mcm_all_visit, tdl_sarsa, tdl_expected_sarsa
-#  tdl_q_learning, tdl_double_q_learning, tdl_n_step_sarsa, dyna_q, mcts, tdl_grad_sarsa]
-solver: "tdl_grad_sarsa"
-discount_factor: 0.95
+#  tdl_q_learning, tdl_double_q_learning, tdl_n_step_sarsa, dyna_q, mcts, tdl_grad_sarsa, tdl_true_online_sarsa,
+#  mc_reinforce, actor_critic]
+solver: "actor_critic"
+# ["first_visit", "all_visit"]
+mc_variant: "first_visit"
+discount_factor: 0.9
 state_dim: 100
 convergenc_criteria: 1.1
 plot_results: True
 env_episodes: 1000
 epsilon_greedy: 0.1
-td_alpha: 0.0625
+learning_rate: 0.0125
+baseline_learning_rate: 0.00125
+td_lambda: 0.84
+eligibility_trace: True
 n_step: 5
 episode_duration: 200
 dq_learning_merging_operator: "sum" # [sum, average, max]

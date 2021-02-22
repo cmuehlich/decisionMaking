@@ -2,7 +2,6 @@ from typing import Tuple, List, Dict, Union
 import itertools
 from enum import Enum
 import numpy as np
-import math
 
 class STATE_SPACE_TYPE(Enum):
     DISCRETE = 0
@@ -10,8 +9,8 @@ class STATE_SPACE_TYPE(Enum):
 
 
 class ACTION_SPACE_TYPE(Enum):
-    DISCRETE = 0
-    CONTINUOUS = 1
+    DISCRETE = [0, 1, 2]
+    CONTINUOUS = np.inf
 
 
 class ACTION_SPACE(Enum):
@@ -20,12 +19,12 @@ class ACTION_SPACE(Enum):
     ACCELERATE = 2
 
 
-class Action():
+class Action:
     def __init__(self, a: int):
         self.a = a
 
 
-class State():
+class State:
     def __init__(self, x: float, v: float, x_pos: Union[int, None] = None, v_pos: Union[int, None] = None):
         self.x = x
         self.v = v

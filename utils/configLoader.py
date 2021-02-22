@@ -5,6 +5,7 @@ from agents.mdp import MDPAgent, MDP_SOLVER
 from agents.tdl import TDLAgent, TDL_METHODS
 from agents.dynaQ import DynaQ, PREDICTION_MODEL_TYPE
 from agents.mcts import MCTSAgent
+from agents.reinforce import Reinforce
 import matplotlib.pyplot as plt
 import gym
 
@@ -19,6 +20,10 @@ def load_model(config_data: Dict) -> Agent:
         agent = MDPAgent(config=config_data)
     elif "mcm" in config_data["solver"]:
         agent = MCMAgent(config=config_data)
+    elif "mc_reinforce" == config_data["solver"]:
+        agent = Reinforce(config=config_data)
+    elif "actor_critic" == config_data["solver"]:
+        agent = TDLAgent(config=config_data, tdl_method=TDL_METHODS.ACTORCRITIC)
     elif "tdl" in config_data["solver"]:
         if "tdl_sarsa" == config_data["solver"]:
             tdl_method = TDL_METHODS.SARSA
@@ -32,6 +37,8 @@ def load_model(config_data: Dict) -> Agent:
             tdl_method = TDL_METHODS.DOUBLE_Q_LEARNING
         elif "tdl_grad_sarsa" == config_data["solver"]:
             tdl_method = TDL_METHODS.SEMI_GRADIENT_SARSA
+        elif "tdl_true_online_sarsa" == config_data["solver"]:
+            tdl_method = TDL_METHODS.TRUE_ONLINE_SARSA
         else:
             raise IOError("Choose one of the available solvers!")
 

@@ -6,29 +6,38 @@ from env.stateSpace import State, STATE_SPACE_TYPE
 
 
 class MCMAgent(Agent):
-    def __init__(self, config: Dict):
+    def __init__(self, config: Dict,
+                 state_space_type: STATE_SPACE_TYPE = STATE_SPACE_TYPE.DISCRETE,
+                 policy_learning_type: POLICY_LEARNING_TYPES = POLICY_LEARNING_TYPES.OFFLINE,
+                 initial_target_policy: POLICY_TYPES = POLICY_TYPES.RANDOM,
+                 initial_behavior_policy: POLICY_TYPES = POLICY_TYPES.EPS_GREEDY):
         super().__init__(config=config,
-                         state_space_type=STATE_SPACE_TYPE.DISCRETE,
+                         state_space_type=state_space_type,
                          reward_model=None,
                          system_dynamics=None,
-                         learning_type=POLICY_LEARNING_TYPES.OFFLINE,
-                         initial_target_policy=POLICY_TYPES.RANDOM,
-                         initial_behavior_policy=POLICY_TYPES.EPS_GREEDY)
+                         learning_type=policy_learning_type,
+                         initial_target_policy=initial_target_policy,
+                         initial_behavior_policy=initial_behavior_policy)
 
-        # Space of state-action values
-        self.q_space = np.random.random(size=(len(self.action_space), self.state_dim, self.state_dim))
+        if POLICY_TYPES.FUNC in [initial_behavior_policy, initial_target_policy]:
+            self.env.create_tilings()
+            # Init q-value function with zero weights
+            self.q_space = [np.zeros(self.env.feature_size) for i in range(len(self.action_space))]
+        else:
+            # Space of state-action values
+            self.q_space = np.random.random(size=(len(self.action_space), self.state_dim, self.state_dim))
         # Storage for averaging returns
         self.returns = np.zeros_like(self.q_space)
         self.visits = np.zeros_like(self.returns)
 
         # MCM specific Definitions
-        self.mcm_type = config["solver"]
+        self.mcm_type = config["mc_variant"]
         self.experience: List[Experience] = list()
         self.history = dict()
 
-        if self.mcm_type == "mcm_first_visit":
+        if self.mcm_type == "first_visit":
             self.mc_control = self._mc_control_first_visit
-        elif self.mcm_type == "mcm_all_visit":
+        elif self.mcm_type == "all_visit":
             self.mc_control = self._mc_control_all_visits
         else:
             raise IOError("Pick one of the available MCM Variants!")
@@ -58,13 +67,9 @@ class MCMAgent(Agent):
             cum_reward = observation.reward + self.discount_factor * cum_reward
 
             # MC all visits
-            self.visits[observation.action, observation.state.x_idx, observation.state.v_idx] += 1
-            self.returns[observation.action, observation.state.x_idx, observation.state.v_idx] += cum_reward
-
-            # Update Q-Value
-            self.q_space[observation.action, observation.state.x_idx, observation.state.v_idx] = \
-                float(self.returns[observation.action, observation.state.x_idx, observation.state.v_idx]
-                      / self.returns[observation.action, observation.state.x_idx, observation.state.v_idx])
+            # Update Q-Value, if behavior and target policy are not equal probability distribution
+            # importance sampling is required
+            self.update_func(observation=observation, cumulative_reward=cum_reward)
 
             # Policy improvement - ties will be broken by picking the first occurring action
             self.target_policy[observation.state.x_idx][observation.state.v_idx] = \
@@ -95,15 +100,10 @@ class MCMAgent(Agent):
             if not self.check_first_visit(check_state=observation.state, reverse_index=counter):
                 counter += 1
                 continue
-
-            self.visits[observation.action, observation.state.x_idx, observation.state.v_idx] += 1
-            self.returns[observation.action, observation.state.x_idx, observation.state.v_idx] += cum_reward
-
-            # Update Q-Value, if behavior and target policy are not equal probability distribution
-            # importance sampling is required
-            self.q_space[observation.action, observation.state.x_idx, observation.state.v_idx] = \
-                float(self.returns[observation.action, observation.state.x_idx, observation.state.v_idx]
-                      / self.returns[observation.action, observation.state.x_idx, observation.state.v_idx])
+            else:
+                # Update Q-Value, if behavior and target policy are not equal probability distribution
+                # importance sampling is required
+                self.update_func(observation=observation, cumulative_reward=cum_reward)
 
             # Policy improvement - ties will be broken by picking the first occuring action
             self.target_policy[observation.state.x_idx][observation.state.v_idx] = \
@@ -115,11 +115,27 @@ class MCMAgent(Agent):
 
         # Save episode results
         self.history[episode] = cum_reward
-        print("Results of Episode {}".format(episode))
-        print("--Cumulative Reward: {}".format(cum_reward))
         # Refresh experience
         self.experience.clear()
 
+    def update_func(self, observation: Experience, cumulative_reward: float) -> None:
+        self.state_update(observation=observation, cumulative_reward=cumulative_reward)
+        self._average_return(observation=observation)
+
+    def _average_return(self, observation: Experience) -> None:
+        self.q_space[observation.action, observation.state.x_idx, observation.state.v_idx] = \
+            float(self.returns[observation.action, observation.state.x_idx, observation.state.v_idx]
+                  / self.visits[observation.action, observation.state.x_idx, observation.state.v_idx])
+
+    def state_update(self, observation: Experience, cumulative_reward: float) -> None:
+        self.visits[observation.action, observation.state.x_idx, observation.state.v_idx] += 1
+        self.returns[observation.action, observation.state.x_idx, observation.state.v_idx] += cumulative_reward
+
     def choose_action(self, state: State) -> int:
         # Constant epsilon greedy policy for behavior generation
-        return self.behavior_policy.eps_greedy_policy(state=state, epsilon=self.epsilon, q_space=self.q_space)
+        if self.behavior_policy.policy_type == POLICY_TYPES.FUNC:
+            feature_vec = self.env.get_feature_vector(observation=[state.x, state.v])
+        else:
+            feature_vec = None
+        return self.behavior_policy.get_action(state=state, epsilon=self.epsilon,
+                                               q_space=self.q_space, feature_vector=feature_vec)

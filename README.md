@@ -25,9 +25,15 @@ Current implementations:
 * *Dyna-Q with explicit environment model*
 * *Monte Carlo Tree Search with explicit environment model*
 
-5) **Function Approximation**
+5) **Value-Based Function Approximation**
 
 * *Semi-Gradient SARSA - Linear Function Approximation with code tiling*
+
+6) **Policy-Based Function Approximation - Policy Gradient Methods**
+
+* *Monte Carlo REINFORCE algorithm*
+* *Monte Carlo REINFORCE algorithm with baseline*
+* *Actor-Critic method*
 
 Open ToDo list: Stochastic MDP, Importance Sampling for Off-Policy, Learned Models for IPL
 
