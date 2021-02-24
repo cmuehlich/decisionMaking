@@ -7,9 +7,11 @@ from env.dynamics import TransitionModel
 from env.reward import ExplicitReward
 from enum import Enum
 
+
 class MDP_SOLVER(Enum):
     VALUE_ITERATION = 0
     POLICY_ITERATION = 1
+
 
 class MDPAgent(Agent):
     def __init__(self, config: Dict):
@@ -48,7 +50,6 @@ class MDPAgent(Agent):
         """
         pass
 
-
     def value_iteration(self) -> None:
         """
         Value Iteration procedure. System dynamics are deterministic why probabilities can be omitted here. If system
@@ -61,7 +62,7 @@ class MDPAgent(Agent):
         valid = True
         while valid:
             max_diff = 0
-            counter +=1
+            counter += 1
             value_space_copy = copy.deepcopy(self.value_space)
             for i, j in self.state_space_idx:
                 state = self.env.get_state_space_value(i, j)
@@ -86,7 +87,7 @@ class MDPAgent(Agent):
         """
         policy_is_stable = False
 
-        # Init policy and value function
+        # Init policy
         policy = np.zeros_like(self.value_space)
         for i, j in self.state_space_idx:
             policy[i][j] = np.random.choice(self.action_space)
@@ -112,7 +113,7 @@ class MDPAgent(Agent):
 
         return policy
 
-    def policy_evaluation(self, policy: List[List[float]]) -> None:
+    def policy_evaluation(self, policy: np.ndarray) -> None:
         """
         Policy evaluation. Takes a policy as input and evaluates it by picking actions according to it and updating
         the state value. Policy is deterministic why no expectation needs to be computed
@@ -128,7 +129,8 @@ class MDPAgent(Agent):
             for i, j in self.state_space_idx:
                 state = self.env.get_state_space_value(i, j)
                 action = policy[i][j]
-                vs = self.reward_model.get_reward(state, action) + self.discount_factor*self.get_future_reward(state, action)
+                vs = self.reward_model.get_reward(state, action) + self.discount_factor*self.get_future_reward(state,
+                                                                                                               action)
                 # UPDATE STATE
                 self.value_space[i][j] = vs
                 max_diff = max(max_diff, np.abs(vs - value_space_copy[i][j]))
@@ -163,11 +165,10 @@ class MDPAgent(Agent):
         """
         Function to retrieve the best action for the encountered state. The state needs to be first transformed from
         the continous to the discrete space.
-        :param policy: Array of shape=(State_dim, State_dim)
         :param state: Tuple of (Position, Acceleration)
         :return: Action Space Idx, 0: Deaccelerate, 1: Hold, 2: Accelerate.
         """
-        return int(self.target_policy[state.x_idx][state.v_idx])
+        return int(self.target_policy[state.x_idx][state.y_idx])
 
     def get_future_reward(self, state: State, action: int) -> float:
         """
@@ -178,9 +179,9 @@ class MDPAgent(Agent):
         :return: Reward of action a taken in state s
         """
         s_t1_obs = self.transition_model.state_transition(state, action)
-        x_t1_idx, v_t1_idx = self.env.get_state_space_idx(observation=s_t1_obs)
-        new_state = State(x=s_t1_obs[0], v=s_t1_obs[1], x_pos=x_t1_idx, v_pos=v_t1_idx)
-        reward = self.value_space[new_state.x_idx][new_state.v_idx]
+        x_t1_idx, y_t1_idx = self.env.get_state_space_idx(observation=s_t1_obs)
+        new_state = State(x=s_t1_obs[0], y=s_t1_obs[1], x_pos=x_t1_idx, y_pos=y_t1_idx)
+        reward = self.value_space[new_state.x_idx][new_state.y_idx]
         return reward
 
     def rms(self, vs: List[List[float]], vs_copy: List[List[float]]) -> float:

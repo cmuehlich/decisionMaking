@@ -95,7 +95,7 @@ class MCTSAgent(Agent):
             self.backup_process()
 
     def compute_ucb(self, node: Node) -> Node:
-        best_action = np.argmax([self.q_space[action_id][node.state.x_idx][node.state.v_idx] +
+        best_action = np.argmax([self.q_space[action_id][node.state.x_idx][node.state.y_idx] +
                                  self.ucb_alpha * np.sqrt(2*np.log(node.total_visits) / node.action_visits[action_id])
                                  for action_id in self.action_space])
 
@@ -138,8 +138,8 @@ class MCTSAgent(Agent):
         # Simulate next state
         next_state_values = self.prediction_model(s_t=leaf_node.state, a_t=action)
         next_state_idx = self.env.get_state_space_idx(observation=next_state_values)
-        next_state = State(x=next_state_values[0], v=next_state_values[1],
-                           x_pos=next_state_idx[0], v_pos=next_state_idx[1])
+        next_state = State(x=next_state_values[0], y=next_state_values[1],
+                           x_pos=next_state_idx[0], y_pos=next_state_idx[1])
 
         self.reward_collection += self.reward_model.get_reward(s=next_state, a=action)
 
@@ -168,8 +168,8 @@ class MCTSAgent(Agent):
             # Simulate next state
             next_state_values = self.prediction_model(s_t=current_state, a_t=action)
             next_state_idx = self.env.get_state_space_idx(observation=next_state_values)
-            next_state = State(x=next_state_values[0], v=next_state_values[1],
-                               x_pos=next_state_idx[0], v_pos=next_state_idx[1])
+            next_state = State(x=next_state_values[0], y=next_state_values[1],
+                               x_pos=next_state_idx[0], y_pos=next_state_idx[1])
 
             # Add reward
             self.reward_collection += self.reward_model.get_reward(s=next_state, a=action)
@@ -191,7 +191,7 @@ class MCTSAgent(Agent):
             action_rewards = visited_node.action_rewards[picked_action]
             action_rewards.append(self.reward_collection)
             visited_node.action_rewards[picked_action] = action_rewards
-            self.q_space[picked_action][visited_node.state.x_idx][visited_node.state.v_idx] = \
+            self.q_space[picked_action][visited_node.state.x_idx][visited_node.state.y_idx] = \
                 np.sum(action_rewards) / visited_node.action_visits[picked_action]
 
     def choose_action(self, state: State) -> int:
@@ -204,7 +204,6 @@ class MCTSAgent(Agent):
         G.add_node(root_node.uuid)
         search_tree = queue.Queue()
         search_tree.put(root_node)
-
 
         while not search_tree.empty():
             top_node = search_tree.get()

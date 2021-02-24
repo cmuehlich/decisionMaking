@@ -29,7 +29,7 @@ def run_mcm(config_data: Dict, agent: Union[MCMAgent, Reinforce], world: gym.Env
 
             # Add experience
             agent.add_experience(state_obs=observation.tolist(),
-                                 action_obs=action,
+                                 action_obs=Action(action=action),
                                  reward_obs=reward,
                                  time_obs=t)
 
@@ -105,7 +105,7 @@ def run_tdl_online(config_data: Dict, agent: TDLAgent, world: gym.Env) -> None:
         action_t0 = agent.choose_action(state_t0)
         # Add experience
         agent.add_experience(state_obs=observation.tolist(),
-                             action_obs=action_t0,
+                             action_obs=Action(action=action_t0),
                              reward_obs=0,
                              time_obs=0)
 
@@ -123,7 +123,7 @@ def run_tdl_online(config_data: Dict, agent: TDLAgent, world: gym.Env) -> None:
             # Make n-step SARSA UPDATE
             # Add experience
             agent.add_experience(state_obs=observation.tolist(),
-                                 action_obs=action_t1,
+                                 action_obs=Action(action=action_t1),
                                  reward_obs=reward,
                                  time_obs=t+1)
 
@@ -170,6 +170,12 @@ def run_tdl_offline(config_data: Dict, agent: Union[TDLAgent, DynaQ], world: gym
         # Choose initial action
         action_t0 = agent.choose_action(state_t0)
 
+        # Add experience
+        agent.add_experience(state_obs=observation.tolist(),
+                             action_obs=Action(action=action_t0),
+                             reward_obs=0,
+                             time_obs=0)
+
         # Run simulation
         for t in range(1000):
             world.render()
@@ -179,19 +185,25 @@ def run_tdl_offline(config_data: Dict, agent: Union[TDLAgent, DynaQ], world: gym
             # Get new state
             state_t1 = agent.gen_state_from_observation(observation=observation.tolist())
 
+            # Pick next action according to behavior policy
+            action_t0 = agent.choose_action(state_t1)
+
+            # Add experience
+            agent.add_experience(state_obs=observation.tolist(),
+                                 action_obs=Action(action=action_t0),
+                                 reward_obs=reward,
+                                 time_obs=t+1)
+
             # Make Q-Learning UPDATE (Maximization)
-            agent.update_func(state_t0=state_t0, action_t0=Action(a=action_t0),
-                              reward=reward, state_t1=state_t1)
+            agent.update_func(time_step=t)
 
             if dyna_instance:
                 # add observation
-                agent.add_observations(obs=Experience(state=state_t0, action=action_t0))
+                agent.add_observations(obs=Experience(state=state_t0, action=Action(action=action_t0)))
 
                 # simulate for n times
                 agent.simulate_n_steps()
 
-            # Pick next action according to behavior policy
-            action_t0 = agent.choose_action(state_t1)
             # Update new state
             state_t0 = state_t1
 
@@ -211,6 +223,7 @@ def run_tdl_offline(config_data: Dict, agent: Union[TDLAgent, DynaQ], world: gym
                  meta_data={"title": "Average Reward per 10/Episode",
                             "x_label": "Episodes/10",
                             "y_label": "Cumulative Reward"})
+
 
 def run_mcts(config_data: Dict, agent: MCTSAgent, world: gym.Env) -> None:
     reward_episode = []

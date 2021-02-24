@@ -24,22 +24,23 @@ class Reinforce(MCMAgent):
         self._gradient_update(observation=observation, cumulative_reward=cumulative_reward)
 
     def _gradient_update(self, observation: Experience, cumulative_reward: float):
-        feature_vector = self.env.get_feature_vector(observation=[observation.state.x, observation.state.v])
+        feature_vector = self.env.get_feature_vector(observation=[observation.state.x, observation.state.y])
         action_probs = self.target_policy.action_preference_distribution(q_space=self.q_space,
                                                                          feature_vector=feature_vector)
         baseline = self.state_value_function.dot(feature_vector)
         reward_estimate = cumulative_reward - baseline
-        learning_factor = self.learning_rate * self.discount_factor * reward_estimate * (1/action_probs[observation.action])
+        # Avoid division by zero
+        if action_probs[observation.action.value] > 0:
+            learning_factor = self.learning_rate * self.discount_factor * reward_estimate * (1/action_probs[observation.
+                                                                                             action.value])
+        else:
+            learning_factor = 0
+
         gradient = feature_vector
 
         # Update Baseline estimator
         self.state_value_function = np.add(self.state_value_function,
                                            np.multiply(gradient, self.baseline_learning_rate * reward_estimate))
         # Update policy
-        self.q_space[observation.action] = np.add(self.q_space[observation.action],
+        self.q_space[observation.action.value] = np.add(self.q_space[observation.action.value],
                                                   np.multiply(gradient, learning_factor))
-
-
-
-
-

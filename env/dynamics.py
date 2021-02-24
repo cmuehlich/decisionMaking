@@ -28,7 +28,7 @@ class TransitionModel():
         :param a_t: Chosen Action
         :return: Future State
         """
-        v_t1 = s_t.v + (a_t - 1) * self.system_params["force"] + math.cos(3 * s_t.x) * (-self.system_params["gravity"])
+        v_t1 = s_t.y + (a_t - 1) * self.system_params["force"] + math.cos(3 * s_t.x) * (-self.system_params["gravity"])
         v_t1 = np.clip(v_t1, self.system_params["v_min"], self.system_params["v_max"])
         x_t1 = s_t.x + v_t1
         x_t1 = np.clip(x_t1, self.system_params["x_min"], self.system_params["x_max"])

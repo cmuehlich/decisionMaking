@@ -3,8 +3,8 @@ from enum import Enum
 from agents.baseClass import Agent
 from env.stateSpace import State, Action, STATE_SPACE_TYPE
 import numpy as np
-import copy
 from agents.baseClass import POLICY_TYPES, POLICY_LEARNING_TYPES
+
 
 class TDL_METHODS(Enum):
     SARSA = 0
@@ -16,10 +16,12 @@ class TDL_METHODS(Enum):
     DOUBLE_Q_LEARNING = 6
     ACTORCRITIC = 7
 
+
 class OPERATORS(Enum):
     MAXIMIZATION = 0
     AVERAGE = 1
     SUM = 2
+
 
 class TDLAgent(Agent):
     def __init__(self, config: Dict, tdl_method: TDL_METHODS):
@@ -94,7 +96,7 @@ class TDLAgent(Agent):
             # initial feature space
             self.env.create_tilings()
             # Init q-value function with zero weights
-            self.q_space = [np.zeros(self.env.feature_size) for i in range(len(self.action_space))]
+            self.q_space = [np.zeros(self.env.feature_size) for _ in range(len(self.action_space))]
 
             if self.tdl_type == TDL_METHODS.ACTORCRITIC:
                 # Init learned value function
@@ -110,35 +112,36 @@ class TDLAgent(Agent):
 
         # Set terminal states to zero
         if state_space_type == STATE_SPACE_TYPE.DISCRETE:
-            for x_idx, v_idx in self.env.get_terminal_states():
+            for x_idx, y_idx in self.env.get_terminal_states():
                 for action_id in np.arange(len(self.action_space)):
                     for q_space in q_spaces:
-                        q_space[action_id][x_idx][v_idx] = 0
+                        q_space[action_id][x_idx][y_idx] = 0
 
         self.td_error_list: List[float] = list()
 
     def update_func(self, time_step: int) -> None:
         if self.tdl_type == TDL_METHODS.SARSA:
             self.sarsa_update(state_t0=self.experience[-2].state, action_t0=self.experience[-2].action,
+                              reward=self.experience[-1].reward,
                               state_t1=self.experience[-1].state, action_t1=self.experience[-1].action)
         elif self.tdl_type == TDL_METHODS.N_STEP_SARSA:
             self.n_step_sarsa_update(current_time_step=time_step)
         elif self.tdl_type == TDL_METHODS.EXPECTED_SARSA:
-            self.expected_sarsa_update(state_t0=self.experience[-2].state, action_t0=Action(a=self.experience[-2].action),
+            self.expected_sarsa_update(state_t0=self.experience[-2].state, action_t0=self.experience[-2].action,
                                        reward=self.experience[-1].reward, state_t1=self.experience[-1].state)
         elif self.tdl_type == TDL_METHODS.SEMI_GRADIENT_SARSA:
-            self.gradient_sarsa(state_t0=self.experience[-2].state, action_t0=Action(a=self.experience[-2].action),
+            self.gradient_sarsa(state_t0=self.experience[-2].state, action_t0=self.experience[-2].action,
                                 reward=self.experience[-1].reward, state_t1=self.experience[-1].state,
-                                action_t1=Action(a=self.experience[-1].action))
+                                action_t1=self.experience[-1].action)
         elif self.tdl_type == TDL_METHODS.TRUE_ONLINE_SARSA:
-            self.true_online_gradient_sarsa(state_t0=self.experience[-2].state, action_t0=Action(a=self.experience[-2].action),
+            self.true_online_gradient_sarsa(state_t0=self.experience[-2].state, action_t0=self.experience[-2].action,
                                             reward=self.experience[-1].reward, state_t1=self.experience[-1].state,
-                                            action_t1=Action(a=self.experience[-1].action))
+                                            action_t1=self.experience[-1].action)
         elif self.tdl_type == TDL_METHODS.Q_LEARNING:
-            self.q_learning_update(state_t0=self.experience[-2].state, action_t0=Action(a=self.experience[-2].action),
+            self.q_learning_update(state_t0=self.experience[-2].state, action_t0=self.experience[-2].action,
                                    reward=self.experience[-1].reward, state_t1=self.experience[-1].state)
         elif self.tdl_type == TDL_METHODS.DOUBLE_Q_LEARNING:
-            self.double_q_learning_update(state_t0=self.experience[-2].state, action_t0=Action(a=self.experience[-2].action),
+            self.double_q_learning_update(state_t0=self.experience[-2].state, action_t0=self.experience[-2].action,
                                           reward=self.experience[-1].reward, state_t1=self.experience[-1].state)
         elif self.tdl_type == TDL_METHODS.ACTORCRITIC:
             self.actor_critic_update()
@@ -178,14 +181,14 @@ class TDLAgent(Agent):
             if self.tdl_type in [TDL_METHODS.SEMI_GRADIENT_SARSA, TDL_METHODS.TRUE_ONLINE_SARSA, TDL_METHODS.ACTORCRITIC]:
                 return self.target_policy.get_action(epsilon=self.epsilon, q_space=q_space,
                                                      feature_vector=self.env.get_feature_vector(observation=[state.x,
-                                                                                                             state.v]))
+                                                                                                             state.y]))
             else:
                 return self.target_policy.get_action(state=state, epsilon=self.epsilon, q_space=q_space)
         else:
             if self.tdl_type in [TDL_METHODS.SEMI_GRADIENT_SARSA, TDL_METHODS.TRUE_ONLINE_SARSA, TDL_METHODS.ACTORCRITIC]:
                 return self.behavior_policy.get_action(epsilon=self.epsilon, q_space=q_space,
                                                        feature_vector=self.env.get_feature_vector(observation=[state.x,
-                                                                                                               state.v]))
+                                                                                                               state.y]))
             else:
                 return self.behavior_policy.get_action(state=state, epsilon=self.epsilon, q_space=q_space)
 
@@ -203,28 +206,28 @@ class TDLAgent(Agent):
                 # up to the end of the episode
                 exp_tn = self.experience[tau + self.n_step]
                 cumulative_reward += np.power(self.discount_factor, self.n_step) * \
-                    self.q_space[exp_tn.action][exp_tn.state.x_idx][exp_tn.state.v_idx]
+                    self.q_space[exp_tn.action.value][exp_tn.state.x_idx][exp_tn.state.y_idx]
 
             # Get the state-action pair to be updated from n - 1 steps back in the past
             exp_t = self.experience[tau]
-            q_v_prev = self.q_space[exp_t.action][exp_t.state.x_idx][exp_t.state.v_idx]
+            q_v_prev = self.q_space[exp_t.action.value][exp_t.state.x_idx][exp_t.state.y_idx]
 
             # Compute the SARSA TD error
             td_error = cumulative_reward - q_v_prev
 
             # Update state-action pair
-            self.q_space[exp_t.action][exp_t.state.x_idx][exp_t.state.v_idx] += self.learning_rate * td_error
+            self.q_space[exp_t.action.value][exp_t.state.x_idx][exp_t.state.y_idx] += self.learning_rate * td_error
 
     def sarsa_update(self, state_t0: State, action_t0: Action, reward: float, state_t1: State, action_t1: Action) -> None:
-        q_v_prev = self.q_space[action_t0.a][state_t0.x_idx][state_t0.v_idx]
-        td_error = reward + self.discount_factor * self.q_space[action_t1.a][state_t1.x_idx][state_t1.v_idx] - q_v_prev
+        q_v_prev = self.q_space[action_t0.value][state_t0.x_idx][state_t0.y_idx]
+        td_error = reward + self.discount_factor * self.q_space[action_t1.value][state_t1.x_idx][state_t1.y_idx] - q_v_prev
 
-        self.q_space[action_t0.a][state_t0.x_idx][state_t0.v_idx] += self.learning_rate * td_error
+        self.q_space[action_t0.value][state_t0.x_idx][state_t0.y_idx] += self.learning_rate * td_error
 
     def gradient_sarsa(self, state_t0: State, action_t0: Action, reward: float,
                        state_t1: State, action_t1: Action) -> None:
-        feature_vector_t0 = self.env.get_feature_vector(observation=[state_t0.x, state_t0.v])
-        feature_vector_t1 = self.env.get_feature_vector(observation=[state_t1.x, state_t1.v])
+        feature_vector_t0 = self.env.get_feature_vector(observation=[state_t0.x, state_t0.y])
+        feature_vector_t1 = self.env.get_feature_vector(observation=[state_t1.x, state_t1.y])
         # Compute gradient: linear in weights -> feature vector
         gradient = feature_vector_t0
 
@@ -232,17 +235,17 @@ class TDLAgent(Agent):
         z_t0 = np.multiply(self.eligibility_trace, (self.discount_factor * self.td_lambda))
         self.eligibility_trace = np.add(z_t0, gradient)
 
-        q_v_prev = self.q_space[action_t0.a].dot(feature_vector_t0)
-        q_v_after = self.q_space[action_t1.a].dot(feature_vector_t1)
+        q_v_prev = self.q_space[action_t0.value].dot(feature_vector_t0)
+        q_v_after = self.q_space[action_t1.value].dot(feature_vector_t1)
         td_error = reward + self.discount_factor * q_v_after - q_v_prev
         weight_update = np.multiply(self.eligibility_trace, self.learning_rate * td_error)
         self.td_error_list.append(td_error)
-        self.q_space[action_t0.a] = np.add(self.q_space[action_t0.a], weight_update)
+        self.q_space[action_t0.value] = np.add(self.q_space[action_t0.value], weight_update)
 
     def true_online_gradient_sarsa(self, state_t0: State, action_t0: Action, reward: float,
                                    state_t1: State, action_t1: Action) -> None:
-        feature_vector_t0 = self.env.get_feature_vector(observation=[state_t0.x, state_t0.v])
-        feature_vector_t1 = self.env.get_feature_vector(observation=[state_t1.x, state_t1.v])
+        feature_vector_t0 = self.env.get_feature_vector(observation=[state_t0.x, state_t0.y])
+        feature_vector_t1 = self.env.get_feature_vector(observation=[state_t1.x, state_t1.y])
         # Compute gradient: linear in weights -> feature vector
         gradient = feature_vector_t0
 
@@ -251,19 +254,19 @@ class TDLAgent(Agent):
         dutch_trace = 1 - self.learning_rate * self.td_lambda * self.eligibility_trace.dot(feature_vector_t0)
         self.eligibility_trace = np.add(z_t0, np.multiply(gradient, dutch_trace))
 
-        q_v_prev = self.q_space[action_t0.a].dot(feature_vector_t0)
-        q_v_after = self.q_space[action_t1.a].dot(feature_vector_t1)
+        q_v_prev = self.q_space[action_t0.value].dot(feature_vector_t0)
+        q_v_after = self.q_space[action_t1.value].dot(feature_vector_t1)
         td_error = reward + self.discount_factor * q_v_after - q_v_prev
         weight_update_trace = np.multiply(self.eligibility_trace, self.learning_rate * (td_error + q_v_prev - self.q_old))
         weight_update_feature = np.multiply(feature_vector_t0, self.learning_rate * (q_v_prev - self.q_old))
 
-        self.q_space[action_t0.a] = np.add(self.q_space[action_t0.a], np.add(weight_update_trace, weight_update_feature))
+        self.q_space[action_t0.value] = np.add(self.q_space[action_t0.value], np.add(weight_update_trace, weight_update_feature))
         self.td_error_list.append(td_error)
         self.q_old = q_v_after
 
     def expected_sarsa_update(self, state_t0: State, action_t0: Action, reward: float, state_t1: State) -> None:
-        q_v_prev = self.q_space[action_t0.a][state_t0.x_idx][state_t0.v_idx]
-        q_values = [self.q_space[action_id][state_t1.x_idx][state_t1.v_idx] for action_id in self.action_space]
+        q_v_prev = self.q_space[action_t0.value][state_t0.x_idx][state_t0.y_idx]
+        q_values = [self.q_space[action_id][state_t1.x_idx][state_t1.y_idx] for action_id in self.action_space]
         max_q_action = np.argmax(q_values)
 
         # For constant epsilon, compute expected future reward
@@ -277,41 +280,41 @@ class TDLAgent(Agent):
 
         td_error = reward + self.discount_factor * expected_future_reward - q_v_prev
         self.td_error_list.append(td_error)
-        self.q_space[action_t0.a][state_t0.x_idx][state_t0.v_idx] += self.learning_rate * td_error
+        self.q_space[action_t0.value][state_t0.x_idx][state_t0.y_idx] += self.learning_rate * td_error
 
     def q_learning_update(self, state_t0: State, action_t0: Action, reward: float, state_t1: State) -> None:
-        q_v_prev = self.q_space[action_t0.a][state_t0.x_idx][state_t0.v_idx]
+        q_v_prev = self.q_space[action_t0.value][state_t0.x_idx][state_t0.y_idx]
 
-        max_q_value_t1 = np.max([self.q_space[action_id][state_t1.x_idx][state_t1.v_idx]
+        max_q_value_t1 = np.max([self.q_space[action_id][state_t1.x_idx][state_t1.y_idx]
                                  for action_id in self.action_space])
         td_error = reward + self.discount_factor * max_q_value_t1 - q_v_prev
         self.td_error_list.append(td_error)
-        self.q_space[action_t0.a][state_t0.x_idx][state_t0.v_idx] += self.learning_rate * td_error
+        self.q_space[action_t0.value][state_t0.x_idx][state_t0.y_idx] += self.learning_rate * td_error
 
     def double_q_learning_update(self, state_t0: State, action_t0: Action, reward: float, state_t1: State) -> None:
         # With probability of 0.5 update q1 space, otherwise q2
         if np.random.uniform() > 0.5:
-            q1_v_prev = self.q1_space[action_t0.a][state_t0.x_idx][state_t0.v_idx]
-            max_q1_action = np.argmax([self.q1_space[action_id][state_t1.x_idx][state_t1.v_idx]
+            q1_v_prev = self.q1_space[action_t0.value][state_t0.x_idx][state_t0.y_idx]
+            max_q1_action = np.argmax([self.q1_space[action_id][state_t1.x_idx][state_t1.y_idx]
                                        for action_id in self.action_space])
-            q2_action_value_t1 = self.q2_space[max_q1_action][state_t1.x_idx][state_t1.v_idx]
+            q2_action_value_t1 = self.q2_space[max_q1_action][state_t1.x_idx][state_t1.y_idx]
             td_error = reward + self.discount_factor * q2_action_value_t1 - q1_v_prev
             self.td_error_list.append(td_error)
-            self.q1_space[action_t0.a][state_t0.x_idx][state_t0.v_idx] += self.learning_rate * td_error
+            self.q1_space[action_t0.value][state_t0.x_idx][state_t0.y_idx] += self.learning_rate * td_error
         else:
-            q2_v_prev = self.q2_space[action_t0.a][state_t0.x_idx][state_t0.v_idx]
-            max_q2_action = np.argmax([self.q2_space[action_id][state_t1.x_idx][state_t1.v_idx]
+            q2_v_prev = self.q2_space[action_t0.value][state_t0.x_idx][state_t0.y_idx]
+            max_q2_action = np.argmax([self.q2_space[action_id][state_t1.x_idx][state_t1.y_idx]
                                        for action_id in self.action_space])
-            q1_action_value_t1 = self.q2_space[max_q2_action][state_t1.x_idx][state_t1.v_idx]
+            q1_action_value_t1 = self.q2_space[max_q2_action][state_t1.x_idx][state_t1.y_idx]
             td_error = reward + self.discount_factor * q1_action_value_t1 - q2_v_prev
             self.td_error_list.append(td_error)
-            self.q2_space[action_t0.a][state_t0.x_idx][state_t0.v_idx] += self.learning_rate * td_error
+            self.q2_space[action_t0.value][state_t0.x_idx][state_t0.y_idx] += self.learning_rate * td_error
 
     def actor_critic_update(self):
         feature_vector_t0 = self.env.get_feature_vector(observation=[self.experience[-2].state.x,
-                                                                     self.experience[-2].state.v])
+                                                                     self.experience[-2].state.y])
         feature_vector_t1 = self.env.get_feature_vector(observation=[self.experience[-1].state.x,
-                                                                     self.experience[-1].state.v])
+                                                                     self.experience[-1].state.y])
 
         if self.env.is_terminal(state=self.experience[-1].state):
             bootstrap_estimate = 0
@@ -327,7 +330,7 @@ class TDLAgent(Agent):
                                            np.multiply(gradient, self.baseline_learning_rate * td_error))
         # Update policy
         learning_factor = self.learning_rate * self.discount_factor * td_error
-        self.q_space[self.experience[-2].action] = np.add(self.q_space[self.experience[-2].action],
-                                                   np.multiply(gradient, learning_factor))
+        self.q_space[self.experience[-2].action.value] = np.add(self.q_space[self.experience[-2].action.value],
+                                                          np.multiply(gradient, learning_factor))
 
         self.td_error_list.append(td_error)

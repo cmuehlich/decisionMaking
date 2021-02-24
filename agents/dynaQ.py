@@ -35,13 +35,13 @@ class DynaQ(TDLAgent):
         try:
             action_list = self.state_action_observations[state_idx_tuple]
             if not len(action_list) == len(self.action_space):
-                if obs.action not in action_list:
-                    action_list.append(obs.action)
+                if obs.action.value not in action_list:
+                    action_list.append(obs.action.value)
 
                 self.state_action_observations[state_idx_tuple] = action_list
 
         except KeyError:
-            self.state_action_observations[state_idx_tuple] = [obs.action]
+            self.state_action_observations[state_idx_tuple] = [obs.action.value]
 
     def simulate_n_steps(self):
         for i in range(self.n_simulations + 1):
@@ -51,14 +51,14 @@ class DynaQ(TDLAgent):
             sample_action = np.random.choice(self.state_action_observations[sample_state])
 
             # Simulate one step and get reward
-            state_t0 = self.env.get_state_space_value(x_idx=sample_state[0], v_idx=sample_state[1])
+            state_t0 = self.env.get_state_space_value(x_idx=sample_state[0], y_idx=sample_state[1])
 
             s_t1 = self.prediction_model(s_t=state_t0, a_t=sample_action)
-            x_t1_idx, v_t1_idx = self.env.get_state_space_idx(observation=s_t1)
-            state_t1 = State(x=s_t1[0], v=s_t1[1], x_pos=x_t1_idx, v_pos=v_t1_idx)
+            x_t1_idx, y_t1_idx = self.env.get_state_space_idx(observation=s_t1)
+            state_t1 = State(x=s_t1[0], y=s_t1[1], x_pos=x_t1_idx, y_pos=y_t1_idx)
 
             reward_t1 = self.reward_model.get_reward(s=state_t1, a=sample_action)
 
             # Make Q-Learning Update
-            self.update_func(state_t0=state_t0, action_t0=Action(a=sample_action),
-                             reward=reward_t1, state_t1=state_t1)
+            self.q_learning_update(state_t0=state_t0, action_t0=Action(action=sample_action),
+                                   reward=reward_t1, state_t1=state_t1)

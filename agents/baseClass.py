@@ -1,5 +1,5 @@
 from typing import Dict, Union, List, Tuple
-from env.stateSpace import State, DiscreteStateSpace, ContinuousStateSpace, STATE_SPACE_TYPE, ACTION_SPACE_TYPE
+from env.stateSpace import State, Action, DiscreteStateSpace, ContinuousStateSpace, STATE_SPACE_TYPE, ACTION_SPACE_TYPE
 from env.reward import RewardModel
 from env.dynamics import TransitionModel
 import numpy as np
@@ -29,11 +29,11 @@ class Node:
         self.expanded = False
 
         # List of successor nodes stored as list of list, containing one set of nodes for each action
-        self.successor_nodes: List[List[Node]] = [list() for i in range(len(self.action_space))]
+        self.successor_nodes: List[List[Node]] = [list() for _ in range(len(self.action_space))]
 
         self.total_visits = np.inf
         self.action_visits = np.zeros(len(self.action_space))
-        self.action_rewards = [list() for i in range(len(self.action_space))]
+        self.action_rewards = [list() for _ in range(len(self.action_space))]
 
     def add_successor(self, node, action: int) -> None:
         if node not in self.successor_nodes[action]:
@@ -50,13 +50,12 @@ class Policy:
         self.action_space: Union[List[int], None] = None
 
     def init_policy(self, state_dim: Union[int, None], state_space_idx: Union[List[Tuple[int, int]], None] = None,
-                    action_space: ACTION_SPACE_TYPE = ACTION_SPACE_TYPE.DISCRETE) -> None:
+                    action_space: Union[ACTION_SPACE_TYPE, None] = None) -> None:
+        self.action_space = action_space.value
+
         if self.policy_type == POLICY_TYPES.EPS_GREEDY:
             self.state_space_idx = state_space_idx
             self.state_dim = state_dim
-            self.action_space = action_space
-        else:
-            self.action_space = action_space.value
 
     def get_action(self, state: Union[State, None] = None, epsilon: float = 0.1,
                    q_space: Union[np.ndarray, None] = None, feature_vector: Union[np.ndarray, None] = None) -> int:
@@ -85,14 +84,14 @@ class Policy:
             action = np.random.choice(self.action_space)
         else:
             # ties will be broken by picking the first occurring action
-            action = np.argmax([q_space[i, state.x_idx, state.v_idx] for i in range(len(self.action_space))])
+            action = np.argmax([q_space[i, state.x_idx, state.y_idx] for i in range(len(self.action_space))])
 
         return action
 
-    def _eps_greedy_continuous_state_policy(self, epsilon: float, q_space: np.ndarray, feature_vector: np.ndarray) -> int:
+    def _eps_greedy_continuous_state_policy(self, epsilon: float, q_space: np.ndarray, feature_vector: np.ndarray) \
+            -> int:
         """
         Epsilon-Greedy Policy for continous state space.
-        :param state:
         :param epsilon:
         :param q_space:
         :param feature_vector:
@@ -115,14 +114,14 @@ class Policy:
         """
         prob_of_greedy_action = 1 - epsilon + (epsilon / len(self.action_space))
         prob_of_exploration = epsilon / len(self.action_space)
-        return prob_of_greedy_action,prob_of_exploration
+        return prob_of_greedy_action, prob_of_exploration
 
     def action_preference_distribution(self, q_space: np.ndarray, feature_vector: np.ndarray) -> List[float]:
         preference_values = [q_space[i].dot(feature_vector) for i in range(len(self.action_space))]
 
         eq_check = [1 for i in range(len(preference_values) - 1) if preference_values[i] == preference_values[i+1]]
         if len(eq_check) == len(self.action_space) - 1:
-            action_probs = [0 for i in range(len(self.action_space))]
+            action_probs = np.zeros_like(self.action_space)
             action_probs[np.random.choice(self.action_space)] = 1
         else:
             norm = 0
@@ -137,7 +136,7 @@ class Policy:
 
 
 class Experience:
-    def __init__(self, state: State, action: int, reward: float = 0, time_step: int = 0):
+    def __init__(self, state: State, action: Action, reward: float = 0, time_step: int = 0):
         self.state = state
         self.action = action
         self.reward = reward
@@ -217,10 +216,10 @@ class Agent(abc.ABC):
         :return:
         """
         if self.state_space_type == STATE_SPACE_TYPE.DISCRETE:
-            x_idx, v_idx = self.env.get_state_space_idx(observation=observation)
+            x_idx, y_idx = self.env.get_state_space_idx(observation=observation)
         else:
-            x_idx, v_idx = None, None
-        return State(x=observation[0], v=observation[1], x_pos=x_idx, v_pos=v_idx)
+            x_idx, y_idx = None, None
+        return State(x=observation[0], y=observation[1], x_pos=x_idx, y_pos=y_idx)
 
     def gen_node_from_observation(self, observation: List[float]) -> Node:
         """
@@ -228,11 +227,11 @@ class Agent(abc.ABC):
         :param observation:
         :return:
         """
-        x_idx, v_idx = self.env.get_state_space_idx(observation=observation)
-        state = State(x=observation[0], v=observation[1], x_pos=x_idx, v_pos=v_idx)
+        x_idx, y_idx = self.env.get_state_space_idx(observation=observation)
+        state = State(x=observation[0], y=observation[1], x_pos=x_idx, y_pos=y_idx)
         return Node(state=state, action_space=self.action_space)
 
-    def add_experience(self, state_obs: List[float], action_obs: int, reward_obs: float, time_obs: int) -> None:
+    def add_experience(self, state_obs: List[float], action_obs: Action, reward_obs: float, time_obs: int) -> None:
         """
         Adds observations to episode experience
         :param state_obs:

@@ -8,6 +8,7 @@ from agents.mcts import MCTSAgent
 from agents.reinforce import Reinforce
 import matplotlib.pyplot as plt
 import gym
+import gym_minigrid
 
 
 def load_env(config_data: Dict) -> gym.Env:

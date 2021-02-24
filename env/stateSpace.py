@@ -3,6 +3,7 @@ import itertools
 from enum import Enum
 import numpy as np
 
+
 class STATE_SPACE_TYPE(Enum):
     DISCRETE = 0
     CONTINUOUS = 1
@@ -20,23 +21,24 @@ class ACTION_SPACE(Enum):
 
 
 class Action:
-    def __init__(self, a: int):
-        self.a = a
+    def __init__(self, action: int):
+        self.value = action
+        self.sign = ACTION_SPACE(action).name
 
 
 class State:
-    def __init__(self, x: float, v: float, x_pos: Union[int, None] = None, v_pos: Union[int, None] = None):
+    def __init__(self, x: float, y: float, x_pos: Union[int, None] = None, y_pos: Union[int, None] = None):
         self.x = x
-        self.v = v
+        self.y = y
 
         self.x_idx = x_pos
-        self.v_idx = v_pos
+        self.y_idx = y_pos
 
     def get_state_value(self) -> Tuple[float, float]:
-        return self.x, self.v
+        return self.x, self.y
 
     def get_state_idx(self) -> Tuple[int, int]:
-        return self.x_idx, self.v_idx
+        return self.x_idx, self.y_idx
 
 
 class StateSpace:
@@ -46,6 +48,10 @@ class StateSpace:
                              "x_min": -1.2,
                              "x_max": 0.6}
 
+        self.x_steps = None
+        self.y_steps = None
+        self.state_dim = None
+
     def check_bounds(self, state: State) -> bool:
         """
         Checks whether state is within the discretized state space.
@@ -54,7 +60,7 @@ class StateSpace:
         """
         valid = False
         if self.state_params["x_min"] <= state.x <= self.state_params["x_max"] and \
-                self.state_params["v_min"] <= state.v <= self.state_params["v_max"]:
+                self.state_params["v_min"] <= state.y <= self.state_params["v_max"]:
             valid = True
         return valid
 
@@ -89,10 +95,10 @@ class DiscreteStateSpace(StateSpace):
         self.state_dim = n
 
         self.x_size = round((self.state_params["x_max"] - self.state_params["x_min"]) / n, 6)
-        self.v_size = round((self.state_params["v_max"] - self.state_params["v_min"]) / n, 6)
+        self.y_size = round((self.state_params["v_max"] - self.state_params["v_min"]) / n, 6)
 
         self.x_steps = [round(self.state_params["x_min"] + i*self.x_size, 6) for i in range(n)]
-        self.v_steps = [round(self.state_params["v_min"] + i*self.v_size, 6) for i in range(n)]
+        self.y_steps = [round(self.state_params["v_min"] + i*self.y_size, 6) for i in range(n)]
 
     def get_state_space(self) -> Tuple[List[Tuple[int, int]], List[State]]:
         """
@@ -102,24 +108,24 @@ class DiscreteStateSpace(StateSpace):
         state_idxs = [int(i) for i in range(self.state_dim)]
         state_space_idx = []
         state_list = []
-        for x_idx, v_idx in itertools.product(state_idxs, state_idxs):
-            state_space_idx.append((x_idx, v_idx))
-            state_list.append(State(x=self.x_steps[x_idx], v=self.v_steps[v_idx],
-                                    x_pos=x_idx, v_pos=v_idx))
+        for x_idx, y_idx in itertools.product(state_idxs, state_idxs):
+            state_space_idx.append((x_idx, y_idx))
+            state_list.append(State(x=self.x_steps[x_idx], y=self.y_steps[y_idx],
+                                    x_pos=x_idx, y_pos=y_idx))
         return state_space_idx, state_list
 
-    def get_state_space_value(self, x_idx: int, v_idx: int) -> State:
+    def get_state_space_value(self, x_idx: int, y_idx: int) -> State:
         """
         Transforms the state from discrete to continous space by choosing the centers of each cell.
         :param x_idx: Int index of discretized Position
-        :param v_idx: Int index of discretized Position
+        :param y_idx: Int index of discretized Position
         :return: State in continous space
         """
         # Get center value of each cell
         x = self.x_steps[x_idx] + 0.5 * self.x_size
-        v = self.v_steps[v_idx] + 0.5 * self.v_size
+        y = self.y_steps[y_idx] + 0.5 * self.y_size
 
-        return State(x=x, v=v, x_pos=x_idx, v_pos=v_idx)
+        return State(x=x, y=y, x_pos=x_idx, y_pos=y_idx)
 
     def get_state_space_idx(self, observation: List[float]) -> Tuple[int, int]:
         """
@@ -129,12 +135,12 @@ class DiscreteStateSpace(StateSpace):
         """
         x_n = (observation[0]-self.state_params["x_min"])/self.x_size
         x_idx = int(x_n - (x_n % self.x_size))
-        v_n = (observation[1] - self.state_params["v_min"]) / self.v_size
-        v_idx = int(v_n - (v_n % self.v_size))
+        y_n = (observation[1] - self.state_params["v_min"]) / self.y_size
+        y_idx = int(y_n - (y_n % self.y_size))
 
         assert x_idx <= self.state_dim
-        assert v_idx <= self.state_dim
-        return x_idx, v_idx
+        assert y_idx <= self.state_dim
+        return x_idx, y_idx
 
 
 class ContinuousStateSpace(StateSpace):
@@ -146,27 +152,27 @@ class ContinuousStateSpace(StateSpace):
 
     def create_tilings(self):
         disc_steps = [10, 20]
-        x_offset, v_offset = [0.1, 0.01], [0.01, 0.001]
+        x_offset, y_offset = [0.1, 0.01], [0.01, 0.001]
 
         tiling_counter = 0
-        for x_off, v_off in itertools.product(x_offset, v_offset):
-            for n_x, n_v in itertools.product(disc_steps, disc_steps):
+        for x_off, y_off in itertools.product(x_offset, y_offset):
+            for n_x, n_y in itertools.product(disc_steps, disc_steps):
                 x_size = round((self.state_params["x_max"] - self.state_params["x_min"] - x_off) / n_x, 6)
-                v_size = round((self.state_params["v_max"] - self.state_params["v_min"] - v_off) / n_v, 6)
+                y_size = round((self.state_params["v_max"] - self.state_params["v_min"] - y_off) / n_y, 6)
 
                 x_min = self.state_params["x_min"] - x_off
                 x_steps = [round(x_min + i*x_size, 6) for i in range(n_x)]
-                v_min = self.state_params["v_min"] - v_off
-                v_steps = [round(v_min + i*v_size, 6) for i in range(n_v)]
+                y_min = self.state_params["v_min"] - y_off
+                y_steps = [round(y_min + i*y_size, 6) for i in range(n_y)]
 
-                self.feature_size += (len(x_steps) * len(v_steps))
-                self.feature_map[tiling_counter] = [(i, j) for i, j in itertools.product(np.arange(n_x), np.arange(n_v))]
+                self.feature_size += (len(x_steps) * len(y_steps))
+                self.feature_map[tiling_counter] = [(i, j) for i, j in itertools.product(np.arange(n_x), np.arange(n_y))]
                 self.tiling_info[tiling_counter] = {"x_lower_bound": x_min,
                                                     "x_cell_size": x_size,
                                                     "x_steps": n_x,
-                                                    "v_lower_bound": v_min,
-                                                    "v_cell_size": v_size,
-                                                    "v_steps": n_v}
+                                                    "v_lower_bound": y_min,
+                                                    "v_cell_size": y_size,
+                                                    "v_steps": n_y}
                 tiling_counter += 1
 
     def get_feature_vector(self, observation: List[float]):
@@ -190,10 +196,10 @@ class ContinuousStateSpace(StateSpace):
         """
         x_n = (observation[0]-tiling_info["x_lower_bound"]/tiling_info["x_cell_size"])
         x_idx = int(x_n - (x_n % tiling_info["x_cell_size"]))
-        v_n = (observation[1] - tiling_info["v_lower_bound"] / tiling_info["v_cell_size"])
-        v_idx = int(v_n - (v_n % tiling_info["v_cell_size"]))
+        y_n = (observation[1] - tiling_info["v_lower_bound"] / tiling_info["v_cell_size"])
+        y_idx = int(y_n - (y_n % tiling_info["v_cell_size"]))
 
         assert x_idx <= tiling_info["x_steps"]
-        assert v_idx <= tiling_info["v_steps"]
+        assert y_idx <= tiling_info["v_steps"]
 
-        return x_idx, v_idx
+        return x_idx, y_idx
